@@ -1,6 +1,7 @@
-// Command demo drives the adapter binary over stdio the way an agent would:
-// find a recipe, inspect the pantry, view this week's meals, propose a grocery
-// addition, write it after approval, read it back.
+// Command demo starts the adapter binary and drives it over HTTP the way an
+// agent would: connect with a token, find a recipe, inspect the pantry, view
+// this week's meals, propose a grocery addition, write it after approval, read
+// it back.
 //
 // By default it runs against the built-in fake Paprika. With -live it uses the
 // account configured in the environment and really adds items to a grocery list.
@@ -12,6 +13,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -44,9 +47,18 @@ func main() {
 func run(adapter string, live, yes, raw bool, query, listName string, maxItems int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	token, err := exec.Command(adapter, "token").Output()
+	if err != nil {
+		return fmt.Errorf("make a token: %w", err)
+	}
+	bearer := strings.TrimSpace(string(token))
+	addr, err := freeAddr()
+	if err != nil {
+		return err
+	}
 	cmd := exec.Command(adapter, "serve")
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "PAPRIKA_ENABLE_WRITES=true")
+	cmd.Env = append(os.Environ(), "PAPRIKA_ENABLE_WRITES=true", "PAPRIKA_LISTEN="+addr, "PAPRIKA_AUTH_TOKENS=demo:"+bearer)
 	if !live {
 		fake := paprikatest.New(time.Now())
 		fake.Listen()
@@ -65,6 +77,33 @@ func run(adapter string, live, yes, raw bool, query, listName string, maxItems i
 	} else {
 		fmt.Println("Backend: LIVE Paprika account from the environment.")
 	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start adapter: %w", err)
+	}
+	stop := func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+	}
+	defer stop()
+	endpoint := "http://" + addr + "/mcp"
+	if err := waitForPort(ctx, addr); err != nil {
+		return err
+	}
+
+	fmt.Printf("\n== Step 0: Connect to %s\n", endpoint)
+	for _, attempt := range []struct{ label, header string }{
+		{"no token", ""},
+		{"wrong token", "Bearer " + strings.Repeat("0", len(bearer))},
+	} {
+		status, err := probe(ctx, endpoint, attempt.header)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("    %-12s -> HTTP %d\n", attempt.label, status)
+		if status != http.StatusUnauthorized {
+			return fmt.Errorf("a request with %s was not refused", attempt.label)
+		}
+	}
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "paprika-demo", Version: "1"}, &mcp.ClientOptions{
 		ElicitationHandler: func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
@@ -81,12 +120,14 @@ func run(adapter string, live, yes, raw bool, query, listName string, maxItems i
 			return &mcp.ElicitResult{Action: "decline"}, nil
 		},
 	})
-	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint,
+		HTTPClient: &http.Client{Transport: withToken(bearer)}}, nil)
 	if err != nil {
-		return fmt.Errorf("start adapter: %w", err)
+		return fmt.Errorf("connect to adapter: %w", err)
 	}
 	defer session.Close()
-	d := &demo{ctx: ctx, session: session, raw: raw}
+	fmt.Println("    demo's token -> connected")
+	d := &demo{ctx: ctx, session: session, raw: raw, stop: stop}
 
 	d.step(1, "Find a recipe")
 	found := d.call("search_recipes", map[string]any{"query": query, "limit": 3})
@@ -161,10 +202,63 @@ func run(adapter string, live, yes, raw bool, query, listName string, maxItems i
 	return nil
 }
 
+// withToken adds the client's bearer token to every request.
+type withToken string
+
+func (t withToken) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+string(t))
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// probe sends an MCP initialize with the given Authorization header and returns the HTTP status.
+func probe(ctx context.Context, endpoint, authorization string) (int, error) {
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	res.Body.Close()
+	return res.StatusCode, nil
+}
+
+// freeAddr picks a loopback port that is free right now.
+func freeAddr() (string, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	defer ln.Close()
+	return ln.Addr().String(), nil
+}
+
+func waitForPort(ctx context.Context, addr string) error {
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) && ctx.Err() == nil {
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("the adapter did not start listening on %s", addr)
+}
+
 type demo struct {
 	ctx     context.Context
 	session *mcp.ClientSession
 	raw     bool
+	stop    func() // ends the adapter process
 }
 
 func (d *demo) step(n int, title string) { fmt.Printf("\n== Step %d: %s\n", n, title) }
@@ -175,6 +269,7 @@ func (d *demo) call(name string, args map[string]any) map[string]any {
 	fmt.Printf("  -> %s %s\n", name, in)
 	res, err := d.session.CallTool(d.ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
+		d.stop()
 		fmt.Fprintln(os.Stderr, "demo failed:", err)
 		os.Exit(1)
 	}
@@ -186,6 +281,7 @@ func (d *demo) call(name string, args map[string]any) map[string]any {
 		fmt.Printf("  <- %s\n", pretty)
 	}
 	if out["ok"] != true {
+		d.stop()
 		fmt.Fprintf(os.Stderr, "demo failed: %s returned %s\n", name, raw)
 		os.Exit(1)
 	}

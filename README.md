@@ -1,8 +1,9 @@
 # paprika-adapter
 
-A small, self-hosted bridge between one household's **Paprika 3** cloud sync account and an MCP client.
-It caches Paprika data in local SQLite and exposes a handful of typed tools over
-stdio. It is not a recipe database and has no web UI: Paprika stays the source of truth.
+A small, self-hosted bridge between one household's **Paprika 3** cloud sync account and MCP clients.
+It runs as one container, caches Paprika data in local SQLite and exposes a handful
+of typed tools over HTTP, to clients that present a token. It is not a recipe database and has no web UI:
+Paprika stays the source of truth.
 
 > **Unofficial API.** Paprika publishes no API; this talks to the same sync endpoints the apps use.
 > **Nothing authenticated has been verified against a real account yet** (it was built without credentials).
@@ -27,33 +28,38 @@ stdio. It is not a recipe database and has no web UI: Paprika stays the source o
   an explicit approval from the user.
 - Recipe and list text is returned as data. It can come from anywhere (imported web recipes), so the agent
   should not treat it as instructions; the approval step is what stands between such text and a write.
-- Credentials come from the environment, the token is cached with mode 600, and neither appears in logs,
-  errors, tool results or exports (tested).
+- MCP is served at `/mcp` (streamable HTTP) and only to requests with a known bearer token. Each client has
+  its own named token; the name is logged with every write. The port is published on loopback by default
+  and speaks plain HTTP, so anything beyond one machine or a trusted network needs a TLS proxy in front.
+- Paprika credentials come from the environment, Paprika's token is cached with mode 600, and neither they
+  nor the client tokens appear in logs, errors, tool results or exports (tested).
 
 ## Quick start
 
 ```sh
 make test                 # fixture-based tests, no network
-make demo                 # end-to-end flow against the built-in fake Paprika
+make demo                 # end-to-end flow over HTTP against the built-in fake Paprika
 make image                # container image
+make token                # a token for one MCP client
+make up                   # start the service on 127.0.0.1:8080
 ```
 
-Then follow [docs/INSTALL.md](docs/INSTALL.md) (Linux ARM64, Docker, client config).
+Follow [docs/INSTALL.md](docs/INSTALL.md) for the steps in between (Linux ARM64, Docker, tokens, client config).
 
 ## Documentation
 
 | | |
 |---|---|
-| [docs/INSTALL.md](docs/INSTALL.md) | install, credentials, client configuration, settings |
+| [docs/INSTALL.md](docs/INSTALL.md) | install, credentials, client tokens, sharing, client configuration, settings |
 | [docs/TOOLS.md](docs/TOOLS.md), [docs/tools.json](docs/tools.json) | tool reference and exact schemas |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | what is known about the sync API, with evidence and verification status |
-| [docs/RUNBOOK.md](docs/RUNBOOK.md) | auth failure, sync conflicts, protocol changes, write verification, backup/export |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | client cannot connect, auth failure, sync conflicts, protocol changes, write verification, backup/export |
 | [docs/DEMO.md](docs/DEMO.md) | transcript of the end-to-end flow |
 
 ## Layout
 
 ```
-cmd/paprika-adapter    CLI: serve (stdio MCP), sync, verify, export, tools
+cmd/paprika-adapter    CLI: serve (MCP over HTTP, token auth), token, sync, verify, export, tools
 cmd/demo               MCP client that walks the end-to-end flow
 internal/paprika       Paprika client: login, envelope, reads, the two writes, drift detection
 internal/store         SQLite cache: recipes + FTS5 search, other collections, sync state, proposals
@@ -70,8 +76,8 @@ static and needs no cgo on ARM64), and `google/uuid`.
 
 | Kind | Command | Needs |
 |---|---|---|
-| Unit and fixture tests (client, cache, sync, every tool, write/retry/approval paths, no-secret-leak checks) | `make test` | nothing |
-| End-to-end over stdio against the fake | `make demo` | a loopback port |
+| Unit and fixture tests (client, cache, sync, every tool, write/retry/approval paths, HTTP token auth, no-secret-leak checks) | `make test` | nothing |
+| End-to-end over HTTP against the fake | `make demo` | two loopback ports |
 | Live protocol check, read-only | `paprika-adapter verify` | credentials |
 | Live read + write test with cleanup | `make integration` | credentials and a disposable list, see runbook |
 

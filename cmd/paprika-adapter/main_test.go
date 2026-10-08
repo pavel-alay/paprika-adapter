@@ -16,7 +16,7 @@ var update = flag.Bool("update", false, "rewrite docs/tools.json from the curren
 func setEnv(t *testing.T, kv ...string) {
 	t.Helper()
 	for _, name := range []string{"PAPRIKA_EMAIL", "PAPRIKA_PASSWORD", "PAPRIKA_EMAIL_FILE", "PAPRIKA_PASSWORD_FILE", "PAPRIKA_BASE_URL",
-		"PAPRIKA_DATA_DIR", "PAPRIKA_ENABLE_WRITES", "PAPRIKA_APPROVAL", "PAPRIKA_MAX_AGE", "PAPRIKA_SYNC_INTERVAL", "PAPRIKA_TZ", "PAPRIKA_LOG_LEVEL"} {
+		"PAPRIKA_DATA_DIR", "PAPRIKA_LISTEN", "PAPRIKA_AUTH_TOKENS", "PAPRIKA_AUTH_TOKENS_FILE", "PAPRIKA_ENABLE_WRITES", "PAPRIKA_APPROVAL", "PAPRIKA_MAX_AGE", "PAPRIKA_SYNC_INTERVAL", "PAPRIKA_TZ", "PAPRIKA_LOG_LEVEL"} {
 		t.Setenv(name, "")
 	}
 	for i := 0; i < len(kv); i += 2 {
@@ -30,7 +30,8 @@ func TestConfigDefaultsAreReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.writes || cfg.humanOnly || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" {
+	if cfg.writes || cfg.humanOnly || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" ||
+		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 }
@@ -41,13 +42,19 @@ func TestConfigReadsSecretsFromFiles(t *testing.T) {
 	if err := os.WriteFile(pw, []byte("s3cret with spaces \n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	tokens := filepath.Join(dir, "tokens")
+	if err := os.WriteFile(tokens, []byte("anna:"+annaToken+"\npeter:"+peterToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	setEnv(t, "PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD_FILE", pw, "PAPRIKA_ENABLE_WRITES", "true", "PAPRIKA_APPROVAL", "human",
-		"PAPRIKA_TZ", "America/New_York", "PAPRIKA_DATA_DIR", dir, "PAPRIKA_SYNC_INTERVAL", "0")
+		"PAPRIKA_TZ", "America/New_York", "PAPRIKA_DATA_DIR", dir, "PAPRIKA_SYNC_INTERVAL", "0",
+		"PAPRIKA_AUTH_TOKENS_FILE", tokens, "PAPRIKA_LISTEN", "0.0.0.0:9000")
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.password != "s3cret with spaces " || !cfg.writes || !cfg.humanOnly || cfg.location.String() != "America/New_York" || cfg.syncInterval != 0 {
+	if cfg.password != "s3cret with spaces " || !cfg.writes || !cfg.humanOnly || cfg.location.String() != "America/New_York" || cfg.syncInterval != 0 ||
+		cfg.listen != "0.0.0.0:9000" || len(cfg.clients) != 2 {
 		t.Fatalf("config = %+v", cfg)
 	}
 }
@@ -62,6 +69,7 @@ func TestConfigRejectsBadValuesWithoutEchoingSecrets(t *testing.T) {
 		"bad duration":     {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_MAX_AGE", "soon"},
 		"negative":         {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_SYNC_INTERVAL", "-1m"},
 		"unknown timezone": {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_TZ", "Mars/Olympus"},
+		"weak token":       {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_AUTH_TOKENS", "anna:hunter2"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			setEnv(t, kv...)

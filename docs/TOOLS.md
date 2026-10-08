@@ -3,6 +3,8 @@
 Exact JSON Schemas (input and output, as served by `tools/list`) are in [tools.json](tools.json).
 A test fails if that file drifts from the code; regenerate with `make tools`.
 
+The tools are served over streamable HTTP at `/mcp` and need an `Authorization: Bearer <token>` header
+([INSTALL.md](INSTALL.md#2-credentials-and-client-tokens)); without one the answer is HTTP 401, before any MCP exchange.
 The client exposes them as `mcp_paprika_<tool>` when the server is named `paprika`.
 
 ## Common result shape

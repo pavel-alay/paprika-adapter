@@ -6,13 +6,33 @@ or run `make sync`. Each collection reports `state`, `error.code` and `protocol_
 The adapter only reads from Paprika, except for the two create-only writes. The cache is disposable:
 deleting the `paprika-data` volume loses nothing that is not in Paprika.
 
+Restarting the adapter is `make restart`. It is needed after every change to `paprika.env`. Clients lose
+their MCP session when it restarts; if one does not reconnect by itself, reload it.
+
+## A client cannot connect
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Container exits at once, log says `PAPRIKA_AUTH_TOKENS must hold at least one name:token entry` | no client token configured | `make token`, add `name:token` to `paprika.env`, `make up` |
+| Log says `PAPRIKA_AUTH_TOKENS: entry N must look like name:token` or `shorter than 32 characters` | malformed entry | fix the entry; the message never repeats the token |
+| HTTP 401 `no bearer token` | the client sends no `Authorization: Bearer …` header | add the header to the client's MCP configuration |
+| HTTP 401 `invalid token`, log line `mcp request with an unknown token rejected` | wrong token, or the entry was removed or changed | compare with `paprika.env`; `make restart` if the file was edited after the last start |
+| HTTP 403 `session user mismatch` | a session opened with one token is used with another | reconnect the client |
+| HTTP 404 `session not found` | the adapter was restarted | reconnect the client |
+| HTTP 404 on any other path | MCP is served at `/mcp` only | fix the URL |
+| Connection refused from another machine | the port is published on loopback | `make restart PUBLISH=<host address>:8080`, see [INSTALL.md](INSTALL.md#6-share-it-with-another-user) |
+
+A token that may have leaked: replace it in `paprika.env` and `make restart`. The Paprika password is not
+affected by a leaked client token, but that client could read everything and, with writes enabled, add
+meals and grocery items until the token is replaced.
+
 ## Auth failure
 
-Symptom: `error.code: auth_failed`; reads keep answering from cache with `state: stale`; writes refuse.
+This is about the adapter's own login to Paprika, not about MCP clients. Symptom: `error.code: auth_failed`; reads keep answering from cache with `state: stale`; writes refuse.
 
 | Message | Cause | Fix |
 |---|---|---|
-| `Account not found.` / `Invalid password.` or similar | wrong email or password in `paprika.env` | correct the file, then reload the client (restarts the adapter) |
+| `Account not found.` / `Invalid password.` or similar | wrong email or password in `paprika.env` | correct the file, then `make restart` |
 | `token refused again right after a successful login` | Paprika accepts the login but not the token | protocol change, see below |
 | `login response carries no token` (`protocol_changed`) | login reply changed shape | protocol change, see below |
 
@@ -20,9 +40,9 @@ Notes:
 
 - An expired token is not a failure: the adapter logs in again once, silently.
 - After a rejected login the adapter waits 5 minutes before trying again, to avoid hammering the account.
-  Restarting it (`/reload-mcp`) clears the wait.
-- To force a clean login: `docker run --rm -v paprika-data:/data busybox rm -f /data/token`,
-  or simply `docker volume rm paprika-data` and `make sync`.
+  Restarting it (`make restart`) clears the wait.
+- To force a clean login: `make down`, `docker run --rm -v paprika-data:/data busybox rm -f /data/token`,
+  `make up`; or reset the whole cache (see [Reset](#reset)).
 - Password changed in the Paprika app: update `paprika.env`; nothing else stores it.
 - Check the credentials independently by signing in to Paprika's cloud sync in the app itself.
 
@@ -57,7 +77,7 @@ Paprika can change its private API at any time. Signs, in rising order of severi
 
 What to do:
 
-1. **Set `PAPRIKA_ENABLE_WRITES=false`** and `/reload-mcp`. Reads from cache are harmless; writes against a
+1. **Set `PAPRIKA_ENABLE_WRITES=false`** and `make restart`. Reads from cache are harmless; writes against a
    changed protocol are not.
 2. `make verify`. It shows which operation broke and which fields moved. Keep the output.
 3. Compare with [PROTOCOL.md](PROTOCOL.md) and the upstream projects it cites (they usually notice first).
@@ -117,5 +137,5 @@ inspection, not something Paprika can import, and the adapter never restores fro
 ## Reset
 
 ```sh
-docker volume rm paprika-data && make sync    # empty cache, fresh login, full re-download
+make down && docker volume rm paprika-data && make sync && make up    # empty cache, fresh login, full re-download
 ```

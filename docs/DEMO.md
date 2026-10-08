@@ -1,13 +1,14 @@
 # End-to-end demonstration
 
-Flow: find a recipe → inspect the pantry → view this week's meals → propose a grocery addition → write it
+Flow: connect with a token → find a recipe → inspect the pantry → view this week's meals → propose a grocery addition → write it
 with approval → read it back.
 
 **What this run is, and is not.** The transcript below is a real run of the real `paprika-adapter` binary,
-driven over stdio by a real MCP client (`cmd/demo`), on 2026-10-08. The backend was the built-in **fake
-Paprika** with synthetic fixtures, served on a loopback port. It demonstrates the adapter, the MCP surface,
-the approval prompt and the write/verify/retry logic. It does **not** demonstrate that Paprika's servers
-accept these requests; that needs your account (see below).
+started as a separate process and driven over HTTP by a real MCP client (`cmd/demo`), on 2026-10-08. The demo
+makes a token with `paprika-adapter token` and starts the server with it on a free loopback port. The backend
+was the built-in **fake Paprika** with synthetic fixtures, served on another loopback port. It demonstrates
+the adapter, token authentication, the MCP surface, the approval prompt and the write/verify/retry logic.
+It does **not** demonstrate that Paprika's servers accept these requests; that needs your account (see below).
 
 ```sh
 make demo        # build, then: go run ./cmd/demo -adapter bin/paprika-adapter -yes
@@ -15,6 +16,12 @@ make demo        # build, then: go run ./cmd/demo -adapter bin/paprika-adapter -
 
 ```text
 Backend: built-in fake Paprika (synthetic fixtures), not a real account.
+
+== Step 0: Connect to http://127.0.0.1:62860/mcp
+    no token     -> HTTP 401
+time=2026-10-08T21:47:15.511+02:00 level=WARN msg="mcp request with an unknown token rejected" remote=127.0.0.1:62868
+    wrong token  -> HTTP 401
+    demo's token -> connected
 
 == Step 1: Find a recipe
   -> search_recipes {"limit":3,"query":"chicken"}
@@ -46,11 +53,11 @@ Backend: built-in fake Paprika (synthetic fixtures), not a real account.
 == Step 4: Propose a grocery addition (nothing is written yet)
   -> list_grocery_lists null
   -> propose_grocery_items {"items":[{"name":"chicken thighs","quantity":"1 lb"},{"name":"soy sauce","quantity":"2 tbsp"},{"name":"cornstarch","quantity":"1 tbsp"}],"list_uid":"9E12FCF54A89FC52EA8E1C5DA1BDA62A6617ED8BDC2AEB6F291B93C7A399F6F6"}
-    proposal_id: FCF01ECE-104F-41C5-846C-8DF50B2611A1
+    proposal_id: 6CA068AF-3806-4393-99C8-B744C4848D33
     summary: Add 3 item(s) to the Paprika grocery list "My Grocery List": 1 lb chicken thighs; 2 tbsp soy sauce; 1 tbsp cornstarch.
 
 == Step 5: Write it, with approval
-  -> commit_proposal {"confirm":true,"proposal_id":"FCF01ECE-104F-41C5-846C-8DF50B2611A1"}
+  -> commit_proposal {"confirm":true,"proposal_id":"6CA068AF-3806-4393-99C8-B744C4848D33"}
 
 >>> APPROVAL REQUEST FROM THE ADAPTER
       Approve this change to Paprika?
@@ -58,10 +65,10 @@ Backend: built-in fake Paprika (synthetic fixtures), not a real account.
       Add 3 item(s) to the Paprika grocery list "My Grocery List": 1 lb chicken thighs; 2 tbsp soy sauce; 1 tbsp cornstarch.
 >>> approved automatically (-yes)
     status: committed, verified by read-back: true
-    written: 1 lb chicken thighs  (uid 9120B724-B661-427C-930D-12516743D5BD)
-    written: 2 tbsp soy sauce  (uid B5704651-E349-43EA-8F33-0BA8C2E773B6)
-    written: 1 tbsp cornstarch  (uid 163146D1-BC94-4145-87CD-30160729BF8D)
-  -> commit_proposal {"confirm":true,"proposal_id":"FCF01ECE-104F-41C5-846C-8DF50B2611A1"}
+    written: 1 lb chicken thighs  (uid 9F1CC058-7A36-4D0B-90D1-19C12C536323)
+    written: 2 tbsp soy sauce  (uid B0A67E63-E475-4AE3-AABA-E7C75E8C679B)
+    written: 1 tbsp cornstarch  (uid 0A4431BA-65A9-483A-8D62-03868AA96DDA)
+  -> commit_proposal {"confirm":true,"proposal_id":"6CA068AF-3806-4393-99C8-B744C4848D33"}
     same commit repeated: status already_committed (no second write)
 
 == Step 6: Read it back
@@ -72,14 +79,16 @@ Backend: built-in fake Paprika (synthetic fixtures), not a real account.
     1 lb chicken thighs
     2 tbsp soy sauce
     1 tbsp cornstarch
-    sync: grocerylists is fresh (last synced 2026-10-08T16:58:48Z)
-    sync: groceries is fresh (last synced 2026-10-08T16:58:48Z)
+    sync: grocerylists is fresh (last synced 2026-10-08T19:47:15Z)
+    sync: groceries is fresh (last synced 2026-10-08T19:47:15Z)
 
 Fake Paprika saw 1 grocery write request(s) in total.
 ```
 
 Things to notice:
 
+- Step 0: requests without a token, or with an unknown one, get HTTP 401 before reaching the MCP server.
+  The `WARN` line is the adapter's own log; it names the remote address, never the token.
 - Step 4 wrote nothing: the proposal exists only in the adapter's SQLite file.
 - Step 5 shows the approval request the adapter sent to the client through MCP elicitation. How it
   is shown is up to the client: a prompt in a CLI, buttons in a chat. Declining ends the commit with `approval_declined`.
@@ -99,6 +108,7 @@ set -a; . ~/.config/paprika-adapter/paprika.env; set +a
 go run ./cmd/demo -adapter bin/paprika-adapter -live -query lentil -list "adapter-test" -max-items 1
 ```
 
-This **really adds** up to `-max-items` items to the named grocery list once you type `y`. Use a disposable
+The demo starts its own adapter process on a free port with a one-off token, so it does not disturb a
+running service. This **really adds** up to `-max-items` items to the named grocery list once you type `y`. Use a disposable
 list, and delete the items in the Paprika app afterwards. Until this has been run, the end-to-end flow is
 demonstrated against the fake only.

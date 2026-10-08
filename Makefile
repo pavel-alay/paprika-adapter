@@ -1,10 +1,13 @@
 IMAGE   ?= paprika-adapter:local
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 ENVFILE ?= $(HOME)/.config/paprika-adapter/paprika.env
-RUN      = docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-           --env-file $(ENVFILE) -v paprika-data:/data
+# Host address the MCP port is published on. Loopback: only this machine can connect.
+PUBLISH ?= 127.0.0.1:8080
+NAME    ?= paprika-adapter
+HARDEN   = --read-only --cap-drop ALL --security-opt no-new-privileges --env-file $(ENVFILE) -v paprika-data:/data
+RUN      = docker run --rm $(HARDEN)
 
-.PHONY: build test integration tools image linux-arm64 sync verify export demo
+.PHONY: build test integration tools image linux-arm64 up down restart logs token sync verify export demo
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/paprika-adapter ./cmd/paprika-adapter
@@ -28,6 +31,24 @@ linux-arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" \
 		-o bin/paprika-adapter-linux-arm64 ./cmd/paprika-adapter
 
+# Start the service. The other targets below can run while it is up; they share the volume.
+up:
+	docker run -d --name $(NAME) --restart unless-stopped --pids-limit 64 --memory 256m \
+		-p $(PUBLISH):8080 $(HARDEN) $(IMAGE)
+
+down:
+	-docker rm -f $(NAME)
+
+# Needed after editing the env file: a container keeps the environment it was created with.
+restart: down up
+
+logs:
+	docker logs -f $(NAME)
+
+# A new random token for one PAPRIKA_AUTH_TOKENS entry.
+token:
+	@docker run --rm $(IMAGE) token
+
 sync:
 	$(RUN) $(IMAGE) sync
 
@@ -37,6 +58,6 @@ verify:
 export:
 	$(RUN) $(IMAGE) export - > paprika-export-$$(date -u +%Y%m%dT%H%M%SZ).tar
 
-# End-to-end flow against the built-in fake Paprika.
+# End-to-end flow over HTTP against the built-in fake Paprika.
 demo: build
 	go run ./cmd/demo -adapter bin/paprika-adapter -yes

@@ -18,8 +18,9 @@ COPY --from=build /out/paprika-adapter /usr/local/bin/paprika-adapter
 # A named volume mounted here is initialised with this ownership, so the
 # unprivileged user can write the cache without any chown at run time.
 COPY --from=build --chown=65532:65532 /out/data /data
-ENV PAPRIKA_DATA_DIR=/data
+ENV PAPRIKA_DATA_DIR=/data PAPRIKA_LISTEN=0.0.0.0:8080
 VOLUME /data
+EXPOSE 8080
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/paprika-adapter"]
 CMD ["serve"]

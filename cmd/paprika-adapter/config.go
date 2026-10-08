@@ -15,6 +15,8 @@ type config struct {
 	password     string
 	baseURL      string
 	dataDir      string
+	listen       string
+	clients      []clientToken
 	writes       bool
 	humanOnly    bool
 	maxAge       time.Duration
@@ -46,6 +48,16 @@ func loadConfig() (config, error) {
 			state = filepath.Join(home, ".local", "state")
 		}
 		cfg.dataDir = filepath.Join(state, "paprika-adapter")
+	}
+	if cfg.listen = os.Getenv("PAPRIKA_LISTEN"); cfg.listen == "" {
+		cfg.listen = "127.0.0.1:8080"
+	}
+	tokens, err := secret("PAPRIKA_AUTH_TOKENS")
+	if err != nil {
+		return cfg, err
+	}
+	if cfg.clients, err = parseTokens(tokens); err != nil {
+		return cfg, err
 	}
 	if cfg.writes, err = envBool("PAPRIKA_ENABLE_WRITES"); err != nil {
 		return cfg, err

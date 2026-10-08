@@ -1,11 +1,10 @@
-// Command paprika-adapter serves one household's Paprika 3 account to an MCP
-// client over stdio, backed by a local SQLite cache.
+// Command paprika-adapter serves one household's Paprika 3 account to MCP
+// clients over HTTP with bearer-token authentication, backed by a local SQLite cache.
 package main
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -30,7 +29,8 @@ const usage = `paprika-adapter %s
 
 Usage: paprika-adapter [command]
 
-  serve     run the MCP server on stdin/stdout (default)
+  serve     run the MCP server over HTTP at PAPRIKA_LISTEN, path /mcp (default)
+  token     print a new random token for one PAPRIKA_AUTH_TOKENS entry
   sync      pull everything from Paprika into the cache once, print the result
   verify    probe every Paprika operation the adapter relies on, print a report
   export    write the cache as JSON plus a SQLite snapshot:  export [-offline] DIR   (DIR "-" = tar on stdout)
@@ -59,6 +59,8 @@ func main() {
 		err = export(ctx, os.Args[2:])
 	case "tools":
 		err = printTools(ctx, os.Stdout)
+	case "token":
+		err = printToken(os.Stdout)
 	case "version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -112,24 +114,6 @@ func (a *app) deps() mcpserver.Deps {
 		Store: a.store, Sync: a.sync, Client: a.client, WritesEnabled: a.cfg.writes,
 		Location: a.cfg.location, Version: version, RequireHumanApproval: a.cfg.humanOnly,
 	}
-}
-
-func serve(ctx context.Context) error {
-	a, err := newApp(ctx)
-	if err != nil {
-		return err
-	}
-	defer a.store.Close()
-	a.log.Info("paprika-adapter starting", "version", version, "writes_enabled", a.cfg.writes,
-		"paprika_host", a.client.Host(), "data_dir", a.cfg.dataDir)
-	if a.cfg.syncInterval > 0 {
-		go a.sync.Run(ctx, a.cfg.syncInterval)
-	}
-	err = mcpserver.New(a.deps()).Run(ctx, &mcp.StdioTransport{})
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
 }
 
 func syncOnce(ctx context.Context) error {
