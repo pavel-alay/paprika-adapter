@@ -1,0 +1,57 @@
+[
+  {
+    "uid": "BF0FF316-1A3F-4AEF-BCD1-87FC6B21586C",
+    "recipe_uid": "DF8BD763-2ADA-49E2-AA2C-05A47A81B007-6735-000003ABB738847D",
+    "name": "Red Lentil Soup",
+    "date": "@D0 00:00:00",
+    "type": 2,
+    "type_uid": "216713D08860CFA0D9787EA5C6CEBC8A8F5B73777F91C904853AC234BB9DF642",
+    "order_flag": 0,
+    "is_ingredient": false,
+    "scale": null
+  },
+  {
+    "uid": "31E01665-751F-494B-BC74-1C29EBACF632",
+    "recipe_uid": null,
+    "name": "Leftover soup",
+    "date": "@D1 00:00:00",
+    "type": 1,
+    "type_uid": "74B7DE10D8791D7B501CB5DC41365994F2CC80227B7CE5CB2548E24AF26DC939",
+    "order_flag": 0,
+    "is_ingredient": false,
+    "scale": null
+  },
+  {
+    "uid": "E22C871B-35AA-46E3-97AC-40ABCADFACDE",
+    "recipe_uid": "3B9E1D42-6A7C-4F85-9D20-1C8E5A4B7F63",
+    "name": "Weeknight Chicken Stir-Fry",
+    "date": "@D2 00:00:00",
+    "type": 2,
+    "type_uid": "216713D08860CFA0D9787EA5C6CEBC8A8F5B73777F91C904853AC234BB9DF642",
+    "order_flag": 0,
+    "is_ingredient": false,
+    "scale": null
+  },
+  {
+    "uid": "5A9D3C17-E4B8-4F60-92A5-D7C1B0E6F384",
+    "recipe_uid": "7F2C6A10-D3B8-4E59-8A41-9B0E7C5D2F16",
+    "name": "Buttermilk Pancakes",
+    "date": "@D5 00:00:00",
+    "type": 0,
+    "type_uid": "913D33C7FD39DB8C8C4514669B011F617D911345592CC77B309B812667959720",
+    "order_flag": 0,
+    "is_ingredient": false,
+    "scale": null
+  },
+  {
+    "uid": "C4F8A2E6-9B03-4D51-A7C9-0E5D1B3F6A72",
+    "recipe_uid": "014031E3-BC74-4CA8-B345-36EBE9C9794B",
+    "name": "Lemon Garlic Roast Chicken",
+    "date": "@P7 00:00:00",
+    "type": 2,
+    "type_uid": "216713D08860CFA0D9787EA5C6CEBC8A8F5B73777F91C904853AC234BB9DF642",
+    "order_flag": 0,
+    "is_ingredient": false,
+    "scale": null
+  }
+]

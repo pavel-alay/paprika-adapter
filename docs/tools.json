@@ -1,0 +1,2572 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Commit proposal"
+    },
+    "description": "Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "description": "must be true, and only after the user has approved the proposal summary",
+          "type": "boolean"
+        },
+        "proposal_id": {
+          "description": "id returned by propose_meal_plan_entry or propose_grocery_items",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "confirm"
+      ],
+      "type": "object"
+    },
+    "name": "commit_proposal",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "committed_at": {
+          "description": "RFC 3339 UTC time of the verified commit",
+          "type": "string"
+        },
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "items": {
+          "description": "the grocery items as read back from Paprika",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "string"
+              },
+              "ingredient": {
+                "type": "string"
+              },
+              "instruction": {
+                "type": "string"
+              },
+              "name": {
+                "description": "the line as shown in Paprika, quantity included",
+                "type": "string"
+              },
+              "purchased": {
+                "type": "boolean"
+              },
+              "quantity": {
+                "type": "string"
+              },
+              "recipe": {
+                "description": "name of the recipe the item was added from, if any",
+                "type": "string"
+              },
+              "recipe_uid": {
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika grocery item uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "purchased"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "kind": {
+          "description": "meal_plan_entry or grocery_items",
+          "type": "string"
+        },
+        "list": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uid",
+            "name"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "meal": {
+          "additionalProperties": false,
+          "description": "the meal-plan entry as read back from Paprika",
+          "properties": {
+            "date": {
+              "description": "YYYY-MM-DD",
+              "type": "string"
+            },
+            "meal_type": {
+              "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+              "type": "string"
+            },
+            "meal_type_uid": {
+              "type": "string"
+            },
+            "name": {
+              "description": "recipe name, or the free text of a note-style entry",
+              "type": "string"
+            },
+            "recipe_uid": {
+              "description": "set when the entry points at a recipe; pass it to get_recipe",
+              "type": "string"
+            },
+            "uid": {
+              "description": "stable Paprika meal uid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "uid",
+            "date",
+            "meal_type",
+            "name"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "skipped": {
+          "description": "proposed items that were not written, with the reason",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "existing_uid": {
+                "description": "uid of the item already in Paprika",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "status": {
+          "description": "committed = written and verified by this call; already_committed = this proposal was committed before and nothing was written again",
+          "type": "string"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "verified": {
+          "description": "true when every written entity was read back from Paprika after the write",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "verified"
+      ],
+      "type": "object"
+    },
+    "title": "Commit proposal"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "Get meal plan"
+    },
+    "description": "Dated meal-plan entries for a date range (default: the current Monday-to-Sunday week), plus the meal types available for planning.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "first day, YYYY-MM-DD; default is Monday of the current week",
+          "type": "string"
+        },
+        "to": {
+          "description": "last day inclusive, YYYY-MM-DD; default is six days after from",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_meal_plan",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "from": {
+          "description": "first day covered, YYYY-MM-DD",
+          "type": "string"
+        },
+        "meal_types": {
+          "description": "meal types defined in Paprika; use a uid as meal_type_uid when proposing an entry",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "uid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "meals": {
+          "description": "sorted by date, then meal type order",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "description": "YYYY-MM-DD",
+                "type": "string"
+              },
+              "meal_type": {
+                "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+                "type": "string"
+              },
+              "meal_type_uid": {
+                "type": "string"
+              },
+              "name": {
+                "description": "recipe name, or the free text of a note-style entry",
+                "type": "string"
+              },
+              "recipe_uid": {
+                "description": "set when the entry points at a recipe; pass it to get_recipe",
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika meal uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "date",
+              "meal_type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "timezone": {
+          "description": "zone used to decide today and the default week",
+          "type": "string"
+        },
+        "to": {
+          "description": "last day covered, YYYY-MM-DD",
+          "type": "string"
+        },
+        "today": {
+          "description": "current date in timezone, YYYY-MM-DD",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Get meal plan"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "Get recipe"
+    },
+    "description": "Full details of one recipe by uid, including Paprika's raw ingredient text and a best-effort parsed version of it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "uid": {
+          "description": "Paprika recipe uid, from search_recipes or a meal-plan entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uid"
+      ],
+      "type": "object"
+    },
+    "name": "get_recipe",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "recipe": {
+          "additionalProperties": false,
+          "properties": {
+            "cached_at": {
+              "description": "RFC 3339 UTC time this copy was fetched from Paprika",
+              "type": "string"
+            },
+            "categories": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "uid": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "cook_time": {
+              "type": "string"
+            },
+            "created": {
+              "description": "creation time as stored by Paprika, YYYY-MM-DD HH:MM:SS, time zone unspecified",
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "difficulty": {
+              "type": "string"
+            },
+            "directions": {
+              "type": "string"
+            },
+            "favorite": {
+              "type": "boolean"
+            },
+            "hash": {
+              "description": "Paprika's content hash; it changes whenever the recipe is edited",
+              "type": "string"
+            },
+            "in_trash": {
+              "type": "boolean"
+            },
+            "ingredients_parsed": {
+              "description": "best-effort split of ingredients_raw into quantity, unit and item; a convenience that may be wrong",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "heading": {
+                    "description": "true for a section heading such as For the sauce:",
+                    "type": "boolean"
+                  },
+                  "item": {
+                    "description": "what remains after quantity and unit, up to the first comma",
+                    "type": "string"
+                  },
+                  "note": {
+                    "description": "preparation note after the first comma",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "description": "leading amount as written, e.g. 1 1/2",
+                    "type": "string"
+                  },
+                  "raw": {
+                    "description": "the line exactly as stored in Paprika",
+                    "type": "string"
+                  },
+                  "unit": {
+                    "description": "unit as written, when recognised",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "raw"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "ingredients_raw": {
+              "description": "ingredient text exactly as stored in Paprika, one ingredient per line; this is the authoritative version",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "nutritional_info": {
+              "type": "string"
+            },
+            "prep_time": {
+              "type": "string"
+            },
+            "rating": {
+              "description": "0 = unrated, otherwise 1 to 5",
+              "type": "integer"
+            },
+            "servings": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "source_url": {
+              "type": "string"
+            },
+            "total_time": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uid",
+            "name",
+            "hash",
+            "ingredients_raw",
+            "ingredients_parsed",
+            "directions",
+            "categories",
+            "rating",
+            "favorite",
+            "in_trash",
+            "cached_at"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Get recipe"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "List grocery items"
+    },
+    "description": "Items on one grocery list. Purchased items are left out unless include_purchased is true.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_purchased": {
+          "description": "also return items already ticked off",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "maximum items to return, 1 to 500, default 200",
+          "type": "integer"
+        },
+        "list_uid": {
+          "description": "uid of the grocery list, from list_grocery_lists",
+          "type": "string"
+        }
+      },
+      "required": [
+        "list_uid"
+      ],
+      "type": "object"
+    },
+    "name": "list_grocery_items",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "items": {
+          "description": "in list order",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "string"
+              },
+              "ingredient": {
+                "type": "string"
+              },
+              "instruction": {
+                "type": "string"
+              },
+              "name": {
+                "description": "the line as shown in Paprika, quantity included",
+                "type": "string"
+              },
+              "purchased": {
+                "type": "boolean"
+              },
+              "quantity": {
+                "type": "string"
+              },
+              "recipe": {
+                "description": "name of the recipe the item was added from, if any",
+                "type": "string"
+              },
+              "recipe_uid": {
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika grocery item uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "purchased"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "list": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uid",
+            "name"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "total": {
+          "description": "items matching the filters before limit",
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "title": "List grocery items"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "List grocery lists"
+    },
+    "description": "Paprika grocery lists with item counts. Use a list's uid with list_grocery_items or propose_grocery_items.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_grocery_lists",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "lists": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "is_default": {
+                "type": "boolean"
+              },
+              "items": {
+                "description": "all items on the list, purchased or not",
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika grocery list uid",
+                "type": "string"
+              },
+              "unpurchased": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "is_default",
+              "items",
+              "unpurchased"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "List grocery lists"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "List pantry"
+    },
+    "description": "Pantry items from Paprika, optionally filtered by ingredient text or stock status.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "in_stock_only": {
+          "description": "leave out items marked as not in stock",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "maximum items to return, 1 to 500, default 100",
+          "type": "integer"
+        },
+        "query": {
+          "description": "only items whose ingredient contains this text, case-insensitive",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_pantry",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "items": {
+          "description": "sorted by ingredient",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "string"
+              },
+              "expiration_date": {
+                "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                "type": "string"
+              },
+              "in_stock": {
+                "type": "boolean"
+              },
+              "ingredient": {
+                "type": "string"
+              },
+              "purchase_date": {
+                "description": "YYYY-MM-DD",
+                "type": "string"
+              },
+              "quantity": {
+                "description": "free text as entered in Paprika",
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika pantry item uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "ingredient",
+              "in_stock"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "total": {
+          "description": "items matching the filters before limit",
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "total",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "title": "List pantry"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Propose grocery items"
+    },
+    "description": "Prepare items to add to one grocery list. Writes nothing. Items already on the list (unpurchased, same name) are skipped unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_duplicates": {
+          "description": "add items even if an unpurchased item with the same name is already on the list; default false",
+          "type": "boolean"
+        },
+        "items": {
+          "description": "1 to 25 items to add",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "instruction": {
+                "description": "note shown with the item, e.g. the organic ones",
+                "type": "string"
+              },
+              "name": {
+                "description": "what to buy, without the amount, e.g. eggs",
+                "type": "string"
+              },
+              "quantity": {
+                "description": "amount as free text, e.g. 1 dozen or 500 g",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "list_uid": {
+          "description": "uid of the grocery list to add to, from list_grocery_lists; there is no default list",
+          "type": "string"
+        }
+      },
+      "required": [
+        "list_uid",
+        "items"
+      ],
+      "type": "object"
+    },
+    "name": "propose_grocery_items",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "proposal": {
+          "additionalProperties": false,
+          "properties": {
+            "expires_at": {
+              "description": "RFC 3339 UTC time after which the proposal can no longer be committed",
+              "type": "string"
+            },
+            "items": {
+              "description": "the grocery items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "description": "aisle Paprika already associates with this ingredient, if any",
+                    "type": "string"
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "uid the item will have in Paprika",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "kind": {
+              "description": "meal_plan_entry or grocery_items",
+              "type": "string"
+            },
+            "list": {
+              "additionalProperties": false,
+              "description": "the grocery list that would receive the items",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "meal": {
+              "additionalProperties": false,
+              "description": "the meal-plan entry that would be created",
+              "properties": {
+                "date": {
+                  "description": "YYYY-MM-DD",
+                  "type": "string"
+                },
+                "meal_type": {
+                  "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+                  "type": "string"
+                },
+                "meal_type_uid": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "recipe name, or the free text of a note-style entry",
+                  "type": "string"
+                },
+                "recipe_uid": {
+                  "description": "set when the entry points at a recipe; pass it to get_recipe",
+                  "type": "string"
+                },
+                "uid": {
+                  "description": "stable Paprika meal uid",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "date",
+                "meal_type",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "proposal_id": {
+              "description": "pass this to commit_proposal",
+              "type": "string"
+            },
+            "skipped": {
+              "description": "requested items that will NOT be written, with the reason",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "existing_uid": {
+                    "description": "uid of the item already in Paprika",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "summary": {
+              "description": "plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "kind",
+            "expires_at",
+            "summary"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Propose grocery items"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Propose meal plan entry"
+    },
+    "description": "Prepare ONE meal-plan entry for a date. Writes nothing. Returns a proposal_id and a summary to show the user; the entry is created only by commit_proposal.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_duplicate": {
+          "description": "plan the same recipe or text again for the same date and meal type; default false",
+          "type": "boolean"
+        },
+        "date": {
+          "description": "day to plan, YYYY-MM-DD",
+          "type": "string"
+        },
+        "meal_type_uid": {
+          "description": "uid of the meal type (Breakfast, Lunch, Dinner, ...) from get_meal_plan.meal_types",
+          "type": "string"
+        },
+        "name": {
+          "description": "free-text entry such as Leftovers, for a meal that is not a recipe",
+          "type": "string"
+        },
+        "recipe_uid": {
+          "description": "recipe to plan; give either recipe_uid or name, not both",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "meal_type_uid"
+      ],
+      "type": "object"
+    },
+    "name": "propose_meal_plan_entry",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "proposal": {
+          "additionalProperties": false,
+          "properties": {
+            "expires_at": {
+              "description": "RFC 3339 UTC time after which the proposal can no longer be committed",
+              "type": "string"
+            },
+            "items": {
+              "description": "the grocery items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "description": "aisle Paprika already associates with this ingredient, if any",
+                    "type": "string"
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "uid the item will have in Paprika",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "kind": {
+              "description": "meal_plan_entry or grocery_items",
+              "type": "string"
+            },
+            "list": {
+              "additionalProperties": false,
+              "description": "the grocery list that would receive the items",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "meal": {
+              "additionalProperties": false,
+              "description": "the meal-plan entry that would be created",
+              "properties": {
+                "date": {
+                  "description": "YYYY-MM-DD",
+                  "type": "string"
+                },
+                "meal_type": {
+                  "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+                  "type": "string"
+                },
+                "meal_type_uid": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "recipe name, or the free text of a note-style entry",
+                  "type": "string"
+                },
+                "recipe_uid": {
+                  "description": "set when the entry points at a recipe; pass it to get_recipe",
+                  "type": "string"
+                },
+                "uid": {
+                  "description": "stable Paprika meal uid",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "date",
+                "meal_type",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "proposal_id": {
+              "description": "pass this to commit_proposal",
+              "type": "string"
+            },
+            "skipped": {
+              "description": "requested items that will NOT be written, with the reason",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "existing_uid": {
+                    "description": "uid of the item already in Paprika",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "summary": {
+              "description": "plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "kind",
+            "expires_at",
+            "summary"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Propose meal plan entry"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "Search recipes"
+    },
+    "description": "Full-text search over cached Paprika recipes. Returns compact summaries; use get_recipe for ingredients and directions.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "only recipes in a category whose name contains these words",
+          "type": "string"
+        },
+        "include_trashed": {
+          "description": "include recipes that are in Paprika's trash",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "maximum recipes to return, 1 to 50, default 10",
+          "type": "integer"
+        },
+        "query": {
+          "description": "words to find in recipe names, ingredients, categories, descriptions, notes and sources; every word must match, as a prefix. Omit to list recipes by name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "search_recipes",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "recipes": {
+          "description": "best match first",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "categories": {
+                "description": "category names",
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "cook_time": {
+                "type": "string"
+              },
+              "favorite": {
+                "type": "boolean"
+              },
+              "in_trash": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string"
+              },
+              "prep_time": {
+                "type": "string"
+              },
+              "rating": {
+                "description": "0 = unrated, otherwise 1 to 5",
+                "type": "integer"
+              },
+              "servings": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "total_time": {
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika recipe uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "categories",
+              "rating",
+              "favorite"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "total_matches": {
+          "type": "integer"
+        },
+        "truncated": {
+          "description": "true when more recipes matched than were returned",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "total_matches",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "title": "Search recipes"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "Sync status"
+    },
+    "description": "Health of the adapter: per-collection freshness, last sync errors, protocol drift, and whether writes are enabled.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "refresh": {
+          "description": "true = contact Paprika now and re-check every collection instead of reporting the last known state",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "sync_status",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_version": {
+          "type": "string"
+        },
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "healthy": {
+          "description": "true when every collection is fresh and no sync error or protocol drift is recorded",
+          "type": "boolean"
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "paprika_host": {
+          "type": "string"
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "writes_enabled": {
+          "description": "whether the propose and commit tools are available",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "healthy",
+        "writes_enabled",
+        "paprika_host",
+        "adapter_version"
+      ],
+      "type": "object"
+    },
+    "title": "Sync status"
+  }
+]

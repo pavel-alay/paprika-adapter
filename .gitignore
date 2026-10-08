@@ -1,0 +1,6 @@
+/bin/
+*.env
+/paprika-export-*
+*.sqlite
+*.sqlite-*
+.DS_Store

@@ -1,0 +1,32 @@
+[
+  {
+    "uid": "02C70C54CAA4A4F7A7CAE38B5169974AF7B10941C8659E805EFC31F0A71314B8",
+    "name": "Produce",
+    "order_flag": 0
+  },
+  {
+    "uid": "12304D0F1A64F772E413322BD03445ADD546F7528D9628F999DBEE3B7C7819B7",
+    "name": "Dairy",
+    "order_flag": 1
+  },
+  {
+    "uid": "5E1A9C0B7D3F4682A1B5C9D0E3F7482615A9C0B7D3F4682A1B5C9D0E3F748261",
+    "name": "Meat",
+    "order_flag": 2
+  },
+  {
+    "uid": "AFADC523FB4CFA907914740E22016338CBD90DDFA42177B87F9E46F2B376EB28",
+    "name": "Baking Goods",
+    "order_flag": 3
+  },
+  {
+    "uid": "D41D8CD98F00B204E9800998ECF8427ED41D8CD98F00B204E9800998ECF8427E",
+    "name": "Miscellaneous",
+    "order_flag": 4
+  },
+  {
+    "uid": "B49385D0-881F-4C7D-9C41-3CFF26490EED",
+    "name": "Pasta",
+    "order_flag": 5
+  }
+]

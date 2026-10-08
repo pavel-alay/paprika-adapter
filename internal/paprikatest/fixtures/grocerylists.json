@@ -1,0 +1,16 @@
+[
+  {
+    "uid": "9E12FCF54A89FC52EA8E1C5DA1BDA62A6617ED8BDC2AEB6F291B93C7A399F6F6",
+    "name": "My Grocery List",
+    "order_flag": 0,
+    "is_default": true,
+    "reminders_list": "Paprika"
+  },
+  {
+    "uid": "90ACAF2C-B0E9-4D46-A50A-3F00C9DF360D",
+    "name": "Costco",
+    "order_flag": 1,
+    "is_default": false,
+    "reminders_list": "Paprika"
+  }
+]
