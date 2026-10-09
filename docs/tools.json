@@ -1,13 +1,13 @@
 [
   {
     "annotations": {
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": true,
       "openWorldHint": true,
       "readOnlyHint": false,
       "title": "Commit proposal"
     },
-    "description": "Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates.",
+    "description": "Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates. Committing a recipe edit overwrites the edited fields of that recipe.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -108,7 +108,7 @@
           ]
         },
         "kind": {
-          "description": "meal_plan_entry or grocery_items",
+          "description": "meal_plan_entry, grocery_items, pantry_items or recipe_edit",
           "type": "string"
         },
         "list": {
@@ -173,8 +173,111 @@
           "description": "false when the call failed; error says why",
           "type": "boolean"
         },
+        "pantry_items": {
+          "description": "the pantry items as read back from Paprika",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "string"
+              },
+              "expiration_date": {
+                "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                "type": "string"
+              },
+              "in_stock": {
+                "type": "boolean"
+              },
+              "ingredient": {
+                "type": "string"
+              },
+              "purchase_date": {
+                "description": "YYYY-MM-DD",
+                "type": "string"
+              },
+              "quantity": {
+                "description": "free text as entered in Paprika",
+                "type": "string"
+              },
+              "uid": {
+                "description": "stable Paprika pantry item uid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uid",
+              "ingredient",
+              "in_stock"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
         "proposal_id": {
           "type": "string"
+        },
+        "recipe_edit": {
+          "additionalProperties": false,
+          "description": "the edited recipe: every changed field with the value it had before and the value read back from Paprika",
+          "properties": {
+            "changes": {
+              "description": "one entry per field that changes",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "field": {
+                    "description": "rating, notes, description or directions",
+                    "type": "string"
+                  },
+                  "from": {
+                    "description": "value before the change; a rating is given as a number, 0 = unrated",
+                    "type": "string"
+                  },
+                  "to": {
+                    "description": "value after the change",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "recipe": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "recipe",
+            "changes"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
         },
         "skipped": {
           "description": "proposed items that were not written, with the reason",
@@ -282,11 +385,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -513,11 +616,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -654,6 +757,14 @@
             "favorite": {
               "type": "boolean"
             },
+            "gallery_photos": {
+              "description": "number of full-resolution photos get_recipe_photo can return with size=full",
+              "type": "integer"
+            },
+            "has_photo": {
+              "description": "true when get_recipe_photo can return a cover thumbnail",
+              "type": "boolean"
+            },
             "hash": {
               "description": "Paprika's content hash; it changes whenever the recipe is edited",
               "type": "string"
@@ -748,6 +859,8 @@
             "rating",
             "favorite",
             "in_trash",
+            "has_photo",
+            "gallery_photos",
             "cached_at"
           ],
           "type": [
@@ -830,11 +943,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -857,6 +970,233 @@
       "type": "object"
     },
     "title": "Get recipe"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "readOnlyHint": true,
+      "title": "Get recipe photo"
+    },
+    "description": "A recipe's photo as an image. By default the small cover thumbnail; size=full returns a full-resolution gallery photo, which only some recipes have. get_recipe says whether a recipe has a photo and how many gallery photos.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "description": "only with size=full: which gallery photo, 1 to get_recipe.gallery_photos, in the order Paprika shows them; default is the cover photo",
+          "type": "integer"
+        },
+        "size": {
+          "description": "thumbnail (default) = the small cover image, a few tens of kilobytes; full = a full-resolution gallery photo, often several hundred kilobytes, which only some recipes have",
+          "type": "string"
+        },
+        "uid": {
+          "description": "recipe uid from search_recipes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uid"
+      ],
+      "type": "object"
+    },
+    "name": "get_recipe_photo",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "photo": {
+          "additionalProperties": false,
+          "description": "what the image content block of this result shows",
+          "properties": {
+            "bytes": {
+              "type": "integer"
+            },
+            "gallery_photos": {
+              "description": "how many full-resolution photos this recipe has",
+              "type": "integer"
+            },
+            "height": {
+              "description": "pixels",
+              "type": "integer"
+            },
+            "index": {
+              "description": "position of this photo in the gallery, for size=full",
+              "type": "integer"
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "photo_uid": {
+              "description": "stable Paprika uid of the gallery photo, for size=full",
+              "type": "string"
+            },
+            "recipe": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": "object"
+            },
+            "size": {
+              "description": "thumbnail or full",
+              "type": "string"
+            },
+            "width": {
+              "description": "pixels",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "recipe",
+            "size",
+            "mime_type",
+            "bytes",
+            "gallery_photos"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Get recipe photo"
   },
   {
     "annotations": {
@@ -1061,11 +1401,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -1253,11 +1593,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -1457,11 +1797,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -1624,7 +1964,7 @@
               ]
             },
             "kind": {
-              "description": "meal_plan_entry or grocery_items",
+              "description": "meal_plan_entry, grocery_items, pantry_items or recipe_edit",
               "type": "string"
             },
             "list": {
@@ -1686,9 +2026,112 @@
                 "object"
               ]
             },
+            "pantry_items": {
+              "description": "the pantry items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "type": "string"
+                  },
+                  "expiration_date": {
+                    "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                    "type": "string"
+                  },
+                  "in_stock": {
+                    "type": "boolean"
+                  },
+                  "ingredient": {
+                    "type": "string"
+                  },
+                  "purchase_date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "description": "free text as entered in Paprika",
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "stable Paprika pantry item uid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "ingredient",
+                  "in_stock"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
             "proposal_id": {
               "description": "pass this to commit_proposal",
               "type": "string"
+            },
+            "recipe_edit": {
+              "additionalProperties": false,
+              "description": "the recipe that would be changed, with the old and new value of every field",
+              "properties": {
+                "changes": {
+                  "description": "one entry per field that changes",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "description": "rating, notes, description or directions",
+                        "type": "string"
+                      },
+                      "from": {
+                        "description": "value before the change; a rating is given as a number, 0 = unrated",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "value after the change",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "recipe": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "uid": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "name"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "recipe",
+                "changes"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
             },
             "skipped": {
               "description": "requested items that will NOT be written, with the reason",
@@ -1808,11 +2251,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -1950,7 +2393,7 @@
               ]
             },
             "kind": {
-              "description": "meal_plan_entry or grocery_items",
+              "description": "meal_plan_entry, grocery_items, pantry_items or recipe_edit",
               "type": "string"
             },
             "list": {
@@ -2012,9 +2455,112 @@
                 "object"
               ]
             },
+            "pantry_items": {
+              "description": "the pantry items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "type": "string"
+                  },
+                  "expiration_date": {
+                    "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                    "type": "string"
+                  },
+                  "in_stock": {
+                    "type": "boolean"
+                  },
+                  "ingredient": {
+                    "type": "string"
+                  },
+                  "purchase_date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "description": "free text as entered in Paprika",
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "stable Paprika pantry item uid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "ingredient",
+                  "in_stock"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
             "proposal_id": {
               "description": "pass this to commit_proposal",
               "type": "string"
+            },
+            "recipe_edit": {
+              "additionalProperties": false,
+              "description": "the recipe that would be changed, with the old and new value of every field",
+              "properties": {
+                "changes": {
+                  "description": "one entry per field that changes",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "description": "rating, notes, description or directions",
+                        "type": "string"
+                      },
+                      "from": {
+                        "description": "value before the change; a rating is given as a number, 0 = unrated",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "value after the change",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "recipe": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "uid": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "name"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "recipe",
+                "changes"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
             },
             "skipped": {
               "description": "requested items that will NOT be written, with the reason",
@@ -2134,11 +2680,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -2161,6 +2707,890 @@
       "type": "object"
     },
     "title": "Propose meal plan entry"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Propose pantry items"
+    },
+    "description": "Prepare items to add to the Paprika pantry, as in stock and bought today. Writes nothing. Ingredients already in the pantry are skipped unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_duplicates": {
+          "description": "add items even if the pantry already holds an item with the same ingredient; default false",
+          "type": "boolean"
+        },
+        "items": {
+          "description": "1 to 25 items to add",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "expiration_date": {
+                "description": "YYYY-MM-DD, only when the item has an expiration date",
+                "type": "string"
+              },
+              "ingredient": {
+                "description": "what is now in the pantry, without the amount, e.g. basmati rice",
+                "type": "string"
+              },
+              "quantity": {
+                "description": "amount as free text, e.g. 2 kg or 3 cans",
+                "type": "string"
+              }
+            },
+            "required": [
+              "ingredient"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "name": "propose_pantry_items",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "proposal": {
+          "additionalProperties": false,
+          "properties": {
+            "expires_at": {
+              "description": "RFC 3339 UTC time after which the proposal can no longer be committed",
+              "type": "string"
+            },
+            "items": {
+              "description": "the grocery items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "description": "aisle Paprika already associates with this ingredient, if any",
+                    "type": "string"
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "uid the item will have in Paprika",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "kind": {
+              "description": "meal_plan_entry, grocery_items, pantry_items or recipe_edit",
+              "type": "string"
+            },
+            "list": {
+              "additionalProperties": false,
+              "description": "the grocery list that would receive the items",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "meal": {
+              "additionalProperties": false,
+              "description": "the meal-plan entry that would be created",
+              "properties": {
+                "date": {
+                  "description": "YYYY-MM-DD",
+                  "type": "string"
+                },
+                "meal_type": {
+                  "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+                  "type": "string"
+                },
+                "meal_type_uid": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "recipe name, or the free text of a note-style entry",
+                  "type": "string"
+                },
+                "recipe_uid": {
+                  "description": "set when the entry points at a recipe; pass it to get_recipe",
+                  "type": "string"
+                },
+                "uid": {
+                  "description": "stable Paprika meal uid",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "date",
+                "meal_type",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "pantry_items": {
+              "description": "the pantry items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "type": "string"
+                  },
+                  "expiration_date": {
+                    "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                    "type": "string"
+                  },
+                  "in_stock": {
+                    "type": "boolean"
+                  },
+                  "ingredient": {
+                    "type": "string"
+                  },
+                  "purchase_date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "description": "free text as entered in Paprika",
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "stable Paprika pantry item uid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "ingredient",
+                  "in_stock"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "proposal_id": {
+              "description": "pass this to commit_proposal",
+              "type": "string"
+            },
+            "recipe_edit": {
+              "additionalProperties": false,
+              "description": "the recipe that would be changed, with the old and new value of every field",
+              "properties": {
+                "changes": {
+                  "description": "one entry per field that changes",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "description": "rating, notes, description or directions",
+                        "type": "string"
+                      },
+                      "from": {
+                        "description": "value before the change; a rating is given as a number, 0 = unrated",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "value after the change",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "recipe": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "uid": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "name"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "recipe",
+                "changes"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "skipped": {
+              "description": "requested items that will NOT be written, with the reason",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "existing_uid": {
+                    "description": "uid of the item already in Paprika",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "summary": {
+              "description": "plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "kind",
+            "expires_at",
+            "summary"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Propose pantry items"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+      "title": "Propose recipe edit"
+    },
+    "description": "Prepare a change to an existing recipe: its star rating, notes, description or directions. Writes nothing. A given field REPLACES what the recipe has; append_note adds to the notes instead. Returns a proposal_id, a summary and the old and new value of every field to show the user.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "append_note": {
+          "description": "text added as a new paragraph after the existing notes; cannot be combined with notes",
+          "type": "string"
+        },
+        "description": {
+          "description": "REPLACES the recipe's description; an empty string clears it",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "directions": {
+          "description": "REPLACES the recipe's directions in full, one step per line; cannot be empty",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "notes": {
+          "description": "REPLACES the recipe's notes; an empty string clears them. To add to the notes use append_note instead",
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rating": {
+          "description": "stars, 1 to 5; 0 removes the rating",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "uid": {
+          "description": "recipe uid from search_recipes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uid"
+      ],
+      "type": "object"
+    },
+    "name": "propose_recipe_edit",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "description": "stable machine-readable code, e.g. invalid_input, not_found, auth_failed, upstream_unavailable, protocol_changed, duplicate, confirmation_required, approval_declined, approval_unavailable, proposal_expired, write_not_verified, uid_conflict",
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "retryable": {
+              "description": "true when repeating the same call later may succeed without anyone changing anything",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "ok": {
+          "description": "false when the call failed; error says why",
+          "type": "boolean"
+        },
+        "proposal": {
+          "additionalProperties": false,
+          "properties": {
+            "expires_at": {
+              "description": "RFC 3339 UTC time after which the proposal can no longer be committed",
+              "type": "string"
+            },
+            "items": {
+              "description": "the grocery items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "description": "aisle Paprika already associates with this ingredient, if any",
+                    "type": "string"
+                  },
+                  "instruction": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "uid the item will have in Paprika",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "name"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "kind": {
+              "description": "meal_plan_entry, grocery_items, pantry_items or recipe_edit",
+              "type": "string"
+            },
+            "list": {
+              "additionalProperties": false,
+              "description": "the grocery list that would receive the items",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "meal": {
+              "additionalProperties": false,
+              "description": "the meal-plan entry that would be created",
+              "properties": {
+                "date": {
+                  "description": "YYYY-MM-DD",
+                  "type": "string"
+                },
+                "meal_type": {
+                  "description": "meal type name, e.g. Dinner; empty if Paprika no longer has the type",
+                  "type": "string"
+                },
+                "meal_type_uid": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "recipe name, or the free text of a note-style entry",
+                  "type": "string"
+                },
+                "recipe_uid": {
+                  "description": "set when the entry points at a recipe; pass it to get_recipe",
+                  "type": "string"
+                },
+                "uid": {
+                  "description": "stable Paprika meal uid",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "date",
+                "meal_type",
+                "name"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "pantry_items": {
+              "description": "the pantry items that would be created",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "aisle": {
+                    "type": "string"
+                  },
+                  "expiration_date": {
+                    "description": "YYYY-MM-DD, present only when the item has an expiration date",
+                    "type": "string"
+                  },
+                  "in_stock": {
+                    "type": "boolean"
+                  },
+                  "ingredient": {
+                    "type": "string"
+                  },
+                  "purchase_date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "description": "free text as entered in Paprika",
+                    "type": "string"
+                  },
+                  "uid": {
+                    "description": "stable Paprika pantry item uid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uid",
+                  "ingredient",
+                  "in_stock"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "proposal_id": {
+              "description": "pass this to commit_proposal",
+              "type": "string"
+            },
+            "recipe_edit": {
+              "additionalProperties": false,
+              "description": "the recipe that would be changed, with the old and new value of every field",
+              "properties": {
+                "changes": {
+                  "description": "one entry per field that changes",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "description": "rating, notes, description or directions",
+                        "type": "string"
+                      },
+                      "from": {
+                        "description": "value before the change; a rating is given as a number, 0 = unrated",
+                        "type": "string"
+                      },
+                      "to": {
+                        "description": "value after the change",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "field",
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "recipe": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "uid": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "name"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "recipe",
+                "changes"
+              ],
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "skipped": {
+              "description": "requested items that will NOT be written, with the reason",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "existing_uid": {
+                    "description": "uid of the item already in Paprika",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "summary": {
+              "description": "plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "kind",
+            "expires_at",
+            "summary"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "sync": {
+          "description": "freshness of each Paprika collection this result was built from",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "description": "seconds since last_synced_at",
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "collection": {
+                "description": "Paprika collection the data came from",
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "description": "why the most recent sync attempt failed, if it did",
+                "properties": {
+                  "at": {
+                    "description": "RFC 3339 UTC time of the failed attempt",
+                    "type": "string"
+                  },
+                  "code": {
+                    "description": "auth_failed, upstream_unavailable, protocol_changed, rejected, not_found or cache_error",
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "at"
+                ],
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "last_synced_at": {
+                "description": "RFC 3339 UTC time the cached copy was last confirmed current",
+                "type": "string"
+              },
+              "protocol_drift": {
+                "additionalProperties": false,
+                "description": "fields Paprika added or stopped sending compared to what the adapter was built against",
+                "properties": {
+                  "missing_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  },
+                  "unknown_fields": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "null",
+                      "array"
+                    ]
+                  }
+                },
+                "type": [
+                  "null",
+                  "object"
+                ]
+              },
+              "rows": {
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
+                "type": "integer"
+              },
+              "state": {
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection",
+              "state",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "title": "Propose recipe edit"
   },
   {
     "annotations": {
@@ -2361,11 +3791,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },
@@ -2533,11 +3963,11 @@
                 ]
               },
               "rows": {
-                "description": "rows cached for this collection",
+                "description": "rows cached for this collection; while never_synced, how far the first sync has got",
                 "type": "integer"
               },
               "state": {
-                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = nothing cached yet",
+                "description": "fresh = confirmed against Paprika recently; stale = cached copy that could not be confirmed (see error); never_synced = no complete copy cached yet, do not answer from it",
                 "type": "string"
               }
             },

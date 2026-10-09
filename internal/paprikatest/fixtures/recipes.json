@@ -15,9 +15,9 @@
     "source": "Family",
     "source_url": "",
     "image_url": null,
-    "photo": null,
+    "photo": "5F0C2B1A-7D3E-4A96-B8C1-2E4F6A8B0C1D.jpg",
     "photo_hash": null,
-    "photo_large": null,
+    "photo_large": "7A1C9E30-4B2D-4F58-9A6C-0D1E2F3A4B5C.jpg",
     "scale": null,
     "hash": "7B059AC1ECA8D2682D65153D3CF2B3F5679B9411B20C7359464999BB82B4816D",
     "categories": [
@@ -29,7 +29,15 @@
     "on_favorites": true,
     "on_grocery_list": false,
     "created": "2024-12-23 20:43:51",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   },
   {
     "uid": "DF8BD763-2ADA-49E2-AA2C-05A47A81B007-6735-000003ABB738847D",
@@ -47,7 +55,7 @@
     "source": "example.com",
     "source_url": "https://example.com/red-lentil-soup",
     "image_url": null,
-    "photo": null,
+    "photo": "9B2D4F60-1C3E-4A75-8B9D-6E7F8A9B0C2E.jpg",
     "photo_hash": null,
     "photo_large": null,
     "scale": null,
@@ -63,7 +71,15 @@
     "on_favorites": false,
     "on_grocery_list": false,
     "created": "2025-03-14 18:02:11",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   },
   {
     "uid": "3B9E1D42-6A7C-4F85-9D20-1C8E5A4B7F63",
@@ -95,7 +111,15 @@
     "on_favorites": false,
     "on_grocery_list": false,
     "created": "2025-03-14 18:02:11",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   },
   {
     "uid": "7F2C6A10-D3B8-4E59-8A41-9B0E7C5D2F16",
@@ -127,7 +151,15 @@
     "on_favorites": true,
     "on_grocery_list": false,
     "created": "2025-03-14 18:02:11",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   },
   {
     "uid": "A6D4E8F2-5B1C-4073-B9A6-3E7D0F8C2A45",
@@ -159,7 +191,15 @@
     "on_favorites": false,
     "on_grocery_list": false,
     "created": "2025-03-14 18:02:11",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   },
   {
     "uid": "C9A07E35-2F6D-4B18-A3C4-8D5E1B9F0672",
@@ -191,6 +231,14 @@
     "on_favorites": false,
     "on_grocery_list": false,
     "created": "2025-03-14 18:02:11",
-    "photo_url": null
+    "photo_url": null,
+    "prep_minutes": null,
+    "cook_minutes": null,
+    "total_minutes": null,
+    "servings_min": null,
+    "servings_max": null,
+    "nutrition": null,
+    "cookbook_uid": null,
+    "metadata_version": null
   }
 ]

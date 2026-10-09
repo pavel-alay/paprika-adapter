@@ -19,15 +19,17 @@ type CommitIn struct {
 
 // CommitResult is what a commit reports, and what is stored to answer repeats.
 type CommitResult struct {
-	ProposalID  string         `json:"proposal_id,omitempty"`
-	Kind        string         `json:"kind,omitempty" jsonschema:"meal_plan_entry or grocery_items"`
-	Status      string         `json:"status,omitempty" jsonschema:"committed = written and verified by this call; already_committed = this proposal was committed before and nothing was written again"`
-	Verified    bool           `json:"verified" jsonschema:"true when every written entity was read back from Paprika after the write"`
-	CommittedAt string         `json:"committed_at,omitempty" jsonschema:"RFC 3339 UTC time of the verified commit"`
-	Meal        *MealEntry     `json:"meal,omitempty" jsonschema:"the meal-plan entry as read back from Paprika"`
-	List        *NamedRef      `json:"list,omitempty"`
-	Items       []GroceryEntry `json:"items,omitempty" jsonschema:"the grocery items as read back from Paprika"`
-	Skipped     []SkippedItem  `json:"skipped,omitempty" jsonschema:"proposed items that were not written, with the reason"`
+	ProposalID  string          `json:"proposal_id,omitempty"`
+	Kind        string          `json:"kind,omitempty" jsonschema:"meal_plan_entry, grocery_items, pantry_items or recipe_edit"`
+	Status      string          `json:"status,omitempty" jsonschema:"committed = written and verified by this call; already_committed = this proposal was committed before and nothing was written again"`
+	Verified    bool            `json:"verified" jsonschema:"true when every written entity was read back from Paprika after the write"`
+	CommittedAt string          `json:"committed_at,omitempty" jsonschema:"RFC 3339 UTC time of the verified commit"`
+	Meal        *MealEntry      `json:"meal,omitempty" jsonschema:"the meal-plan entry as read back from Paprika"`
+	List        *NamedRef       `json:"list,omitempty"`
+	Items       []GroceryEntry  `json:"items,omitempty" jsonschema:"the grocery items as read back from Paprika"`
+	Pantry      []PantryEntry   `json:"pantry_items,omitempty" jsonschema:"the pantry items as read back from Paprika"`
+	Recipe      *RecipeEditView `json:"recipe_edit,omitempty" jsonschema:"the edited recipe: every changed field with the value it had before and the value read back from Paprika"`
+	Skipped     []SkippedItem   `json:"skipped,omitempty" jsonschema:"proposed items that were not written, with the reason"`
 }
 
 type CommitOut struct {
@@ -80,6 +82,10 @@ func (s *server) commitProposal(ctx context.Context, in CommitIn, out *CommitOut
 		terr = s.commitMeal(ctx, p, out)
 	case kindGroceries:
 		terr = s.commitGroceries(ctx, p, out)
+	case kindPantry:
+		terr = s.commitPantry(ctx, p, out)
+	case kindRecipe:
+		terr = s.commitRecipeEdit(ctx, p, out)
 	default:
 		terr = invalid("proposal has an unknown kind")
 	}

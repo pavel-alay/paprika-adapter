@@ -57,6 +57,13 @@ func (s *Store) MarkChecked(ctx context.Context, collection string, at time.Time
 	return err
 }
 
+// SetDrift replaces the drift recorded for a collection without touching its sync times.
+func (s *Store) SetDrift(ctx context.Context, collection string, drift paprika.Drift) error {
+	d, _ := json.Marshal(drift)
+	_, err := s.db.ExecContext(ctx, `UPDATE sync_state SET drift = ? WHERE collection = ?`, string(d), collection)
+	return err
+}
+
 // MarkFetched records a successful download. counter is nil when Paprika's
 // counter must not be trusted yet, which forces a fetch on the next sync.
 func (s *Store) MarkFetched(ctx context.Context, collection string, counter *int64, drift paprika.Drift, at time.Time) error {

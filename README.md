@@ -13,17 +13,21 @@ Paprika stays the source of truth.
 
 | | |
 |---|---|
-| Read tools | `search_recipes`, `get_recipe`, `list_pantry`, `get_meal_plan`, `list_grocery_lists`, `list_grocery_items`, `sync_status` |
-| Write tools (off by default) | `propose_meal_plan_entry`, `propose_grocery_items`, `commit_proposal` |
-| Not in v1 | delete, edit, move, bulk operations, recipe writes, photos, menus |
+| Read tools | `search_recipes`, `get_recipe`, `get_recipe_photo`, `list_pantry`, `get_meal_plan`, `list_grocery_lists`, `list_grocery_items`, `sync_status` |
+| Write tools (off by default) | `propose_meal_plan_entry`, `propose_grocery_items`, `propose_pantry_items`, `propose_recipe_edit`, `commit_proposal` |
+| Not available | delete, move, bulk operations, creating recipes, editing anything but a recipe's rating, notes, description and directions, photo uploads, menus |
 
 - Every result is compact typed JSON with Paprika's own uids and an explicit `sync` block
   (`fresh` / `stale` / `never_synced`, last sync time, last error, protocol drift).
 - Sync is incremental: one `status` call per refresh, only changed collections are downloaded, only recipes
   whose hash changed are fetched.
 - Recipe ingredient text is stored and returned verbatim (`ingredients_raw`); the parsed form is optional sugar.
-- The cache is never pushed back. Writes are create-only, use freshly minted uids, check Paprika first,
-  are verified by reading back, and are safe to retry.
+- Recipe photos are returned as MCP image content, fetched from Paprika when asked for and not stored: the
+  small cover thumbnail by default, a full-resolution gallery photo on request.
+- The cache is never pushed back. Writes that add rows use freshly minted uids, check Paprika first, are
+  verified by reading back, and are safe to retry.
+- One write changes existing data: a recipe edit overwrites the rating, notes, description or directions of
+  a recipe, on a copy read from Paprika at that moment, so every other field is sent back as it was.
 - A write needs `confirm: true` from the agent and, where the client supports MCP elicitation,
   an explicit approval from the user.
 - Recipe and list text is returned as data. It can come from anywhere (imported web recipes), so the agent
@@ -61,7 +65,7 @@ Follow [docs/INSTALL.md](docs/INSTALL.md) for the steps in between (Linux ARM64,
 ```
 cmd/paprika-adapter    CLI: serve (MCP over HTTP, token auth), token, sync, verify, export, tools
 cmd/demo               MCP client that walks the end-to-end flow
-internal/paprika       Paprika client: login, envelope, reads, the two writes, drift detection
+internal/paprika       Paprika client: login, envelope, reads, the three create-only writes, the recipe edit and its content hash, drift detection
 internal/store         SQLite cache: recipes + FTS5 search, other collections, sync state, proposals
 internal/syncer        incremental pull, freshness reporting
 internal/mcpserver     the tools

@@ -312,6 +312,9 @@ func opPath(path string) string {
 	if rest, ok := strings.CutPrefix(path, syncPath+"recipe/"); ok && rest != "" {
 		return syncPath + "recipe/{uid}/"
 	}
+	if rest, ok := strings.CutPrefix(path, syncPath+"photo/"); ok && rest != "" {
+		return syncPath + "photo/{uid}/"
+	}
 	return path
 }
 

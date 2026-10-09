@@ -107,6 +107,10 @@ func serve(ctx context.Context) error {
 	if err := srv.Shutdown(grace); err != nil {
 		srv.Close()
 	}
+	// A sync that was cut short records where it stopped; let it, before the cache closes.
+	idle, cancelIdle := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelIdle()
+	a.sync.Stop(idle)
 	return nil
 }
 

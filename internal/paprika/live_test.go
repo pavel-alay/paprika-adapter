@@ -9,7 +9,9 @@ package paprika
 //	PAPRIKA_IT_LIST_UID               a disposable grocery list whose name contains "test";
 //	                                  enables the grocery write test
 //	PAPRIKA_IT_MEAL_DATE              YYYY-MM-DD, a day you do not plan on; enables the meal write test
-//	PAPRIKA_IT_RECIPE_UID             optional disposable recipe to plan in the meal write test
+//	PAPRIKA_IT_RECIPE_UID             optional disposable recipe to plan in the meal write test; if its
+//	                                  name contains "test" it also enables the recipe edit test
+//	PAPRIKA_IT_PANTRY                 set to 1 to enable the pantry write test
 //
 //	go test -tags integration -run Live -v ./internal/paprika/
 //
@@ -18,6 +20,9 @@ package paprika
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -79,6 +84,67 @@ func TestLiveReads(t *testing.T) {
 	}
 	if _, err := c.Recipe(ctx, NewUID()); KindOf(err) != KindNotFound {
 		t.Errorf("unknown recipe: got %v, want not_found", err)
+	}
+}
+
+// TestLivePhotos is read-only: it downloads one cover thumbnail and one gallery photo.
+func TestLivePhotos(t *testing.T) {
+	c := liveClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	rows, err := c.List(ctx, Photos)
+	if err != nil {
+		t.Fatalf("photos: %v", err)
+	}
+	if d := DetectDrift(string(Photos), rows); !d.Empty() {
+		t.Errorf("photos: field drift: new %v, gone %v", d.Unknown, d.Missing)
+	}
+	t.Logf("gallery photos: %d", len(rows))
+	if len(rows) > 0 {
+		link, err := c.PhotoLink(ctx, rows[0].UID)
+		if err != nil {
+			t.Fatalf("photo link: %v", err)
+		}
+		data, mime, err := c.Download(ctx, link)
+		if err != nil {
+			t.Fatalf("gallery photo: %v", err)
+		}
+		t.Logf("gallery photo: %d bytes, %s", len(data), mime)
+	}
+
+	refs, err := c.RecipeRefs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, ref := range refs {
+		if i == 40 {
+			t.Fatal("none of the first 40 recipes has a photo")
+		}
+		raw, err := c.Recipe(ctx, ref.UID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec, err := Decode[Recipe](raw.JSON)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Photo == nil || *rec.Photo == "" {
+			continue
+		}
+		if rec.PhotoURL == nil || rec.PhotoHash == nil {
+			t.Fatal("a recipe with a photo has no photo_url or photo_hash")
+		}
+		data, mime, err := c.Download(ctx, *rec.PhotoURL)
+		if err != nil {
+			t.Fatalf("thumbnail: %v", err)
+		}
+		sum := fmt.Sprintf("%X", sha256.Sum256(data))
+		t.Logf("thumbnail: %d bytes, %s, matches photo_hash: %v", len(data), mime, strings.EqualFold(sum, *rec.PhotoHash))
+		if !strings.EqualFold(sum, *rec.PhotoHash) {
+			t.Error("thumbnail bytes do not match the recipe's photo_hash")
+		}
+		return
 	}
 }
 
@@ -153,6 +219,154 @@ func TestLiveGroceryWrite(t *testing.T) {
 	n := 0
 	for _, r := range rows {
 		if g, _ := Decode[GroceryItem](r.JSON); g.Name == item.Name {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("repeated write produced %d rows, want 1", n)
+	}
+}
+
+// TestLiveRecipeEdit overwrites rating, notes, description and directions of a
+// disposable recipe, reads them back, then writes the original values again.
+func TestLiveRecipeEdit(t *testing.T) {
+	c := liveClient(t)
+	uid := os.Getenv("PAPRIKA_IT_RECIPE_UID")
+	if uid == "" {
+		t.Skip("PAPRIKA_IT_RECIPE_UID is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	original, err := c.Recipe(ctx, uid)
+	if err != nil {
+		t.Fatalf("recipe: %v", err)
+	}
+	was, err := Decode[Recipe](original.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToLower(was.Name), "test") {
+		t.Skipf("recipe %s is not named as a test recipe; refusing to edit it", uid)
+	}
+	if computed, _ := RecipeHash(original.JSON); computed != was.Hash {
+		t.Logf("the stored hash of this recipe is not the one this adapter computes (another client hashed it)")
+	}
+
+	stamp := "[adapter-it] " + time.Now().UTC().Format(time.RFC3339)
+	rating := was.Rating%5 + 1
+	notes, description, directions := stamp+" notes\nsecond line / with a slash", stamp+" description", stamp+" step one\nstep two"
+	if _, err := c.WriteRecipe(ctx, original, RecipeEdit{Rating: &rating, Notes: &notes, Description: &description, Directions: &directions}); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		now, err := c.Recipe(ctx, uid)
+		if err == nil {
+			_, err = c.WriteRecipe(ctx, now, RecipeEdit{Rating: &was.Rating, Notes: &was.Notes, Description: &was.Description, Directions: &was.Directions})
+		}
+		if err != nil {
+			t.Errorf("RESTORE FAILED, put back rating %d and the texts of %q by hand: %v", was.Rating, was.Name, err)
+			return
+		}
+		back, err := c.Recipe(ctx, uid)
+		if err != nil {
+			t.Errorf("restore could not be read back: %v", err)
+			return
+		}
+		got, _ := Decode[Recipe](back.JSON)
+		if got.Rating != was.Rating || got.Notes != was.Notes || got.Description != was.Description || got.Directions != was.Directions {
+			t.Errorf("restore did not take; check %q in the app", was.Name)
+		}
+		t.Logf("restored; hash equals the original: %v", got.Hash == was.Hash)
+	})
+
+	edited, err := c.Recipe(ctx, uid)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	got, err := Decode[Recipe](edited.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rating != rating || got.Notes != notes || got.Description != description || got.Directions != directions {
+		t.Fatalf("read back rating=%d notes=%q description=%q directions=%q", got.Rating, got.Notes, got.Description, got.Directions)
+	}
+	if got.Hash == was.Hash {
+		t.Error("the content hash did not change with the content")
+	}
+	// Everything that was not edited must have survived the whole-object replace.
+	var before, after map[string]json.RawMessage
+	_ = json.Unmarshal(original.JSON, &before)
+	_ = json.Unmarshal(edited.JSON, &after)
+	for field, old := range before {
+		switch field {
+		case "rating", "notes", "description", "directions", "hash", "photo_url":
+			continue
+		}
+		if string(after[field]) != string(old) {
+			t.Errorf("%s changed from %s to %s", field, old, after[field])
+		}
+	}
+	if len(after) != len(before) {
+		t.Errorf("the recipe had %d fields and now has %d", len(before), len(after))
+	}
+}
+
+func TestLivePantryWrite(t *testing.T) {
+	c := liveClient(t)
+	if os.Getenv("PAPRIKA_IT_PANTRY") != "1" {
+		t.Skip("PAPRIKA_IT_PANTRY is not 1")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	expires := "2099-12-31 00:00:00"
+	item := NewPantryItem{UID: NewUID(), Ingredient: "[adapter-it] " + time.Now().UTC().Format(time.RFC3339), Quantity: "1 test",
+		InStock: true, HasExpiration: true, ExpirationDate: &expires, PurchaseDate: time.Now().UTC().Format("2006-01-02") + " 00:00:00"}
+	if err := c.AddPantryItems(ctx, []NewPantryItem{item}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := c.upsert(ctx, Pantry, []pantryWire{{NewPantryItem: item, Deleted: true}}); err != nil {
+			t.Errorf("CLEANUP FAILED, delete %q from the pantry by hand: %v", item.Ingredient, err)
+			return
+		}
+		if _, found := liveFind(t, c, Pantry, item.UID); found {
+			t.Errorf("soft-deleted pantry item %q is still returned; delete it by hand", item.Ingredient)
+		}
+	})
+	raw, found := liveFind(t, c, Pantry, item.UID)
+	if !found {
+		t.Fatal("item was acknowledged but is not returned by GET /sync/pantry/")
+	}
+	if d := DetectDrift(string(Pantry), []Raw{raw}); !d.Empty() {
+		t.Errorf("pantry field drift: new %v, gone %v", d.Unknown, d.Missing)
+	}
+	got, err := Decode[PantryItem](raw.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Ingredient != item.Ingredient || got.Quantity != item.Quantity || !got.InStock || !got.HasExpiration ||
+		got.ExpirationDate == nil || *got.ExpirationDate != expires || got.PurchaseDate == nil || *got.PurchaseDate != item.PurchaseDate {
+		t.Fatalf("read back %s, wrote %+v", raw.JSON, item)
+	}
+	t.Logf("read back: %s", raw.JSON)
+
+	// Posting the same uid again must not create a second row.
+	if err := c.AddPantryItems(ctx, []NewPantryItem{item}); err != nil {
+		t.Fatalf("repeat add: %v", err)
+	}
+	rows, err := c.List(ctx, Pantry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, r := range rows {
+		if p, _ := Decode[PantryItem](r.JSON); p.Ingredient == item.Ingredient {
 			n++
 		}
 	}

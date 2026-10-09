@@ -257,16 +257,17 @@ func TestSecretsNeverReachLogsOrErrors(t *testing.T) {
 
 func TestDetectDrift(t *testing.T) {
 	rows := []paprika.Raw{
-		{UID: "1", JSON: []byte(`{"uid":"1","name":"A","order_flag":1,"brand_new":true}`)},
+		{UID: "1", JSON: []byte(`{"uid":"1","name":"A","order_flag":1,"cookbook_uid":null,"brand_new":true}`)},
 		{UID: "2", JSON: []byte(`{"uid":"2","name":"B","order_flag":2}`)},
 	}
 	d := paprika.DetectDrift(string(paprika.GroceryAisles), rows)
-	if len(d.Unknown) != 1 || d.Unknown[0] != "brand_new" || len(d.Missing) != 0 {
-		t.Fatalf("drift = %+v, want unknown=[brand_new]", d)
+	if len(d.Unknown) != 2 || d.Unknown[0] != "brand_new" || d.Unknown[1] != "cookbook_uid" || len(d.Missing) != 0 {
+		t.Fatalf("drift = %+v, want unknown=[brand_new cookbook_uid]", d)
 	}
+	// A field counts as present when any row carries it, even as null.
 	d = paprika.DetectDrift(string(paprika.Categories), rows)
-	if len(d.Missing) != 1 || d.Missing[0] != "parent_uid" {
-		t.Fatalf("drift = %+v, want missing=[parent_uid]", d)
+	if len(d.Missing) != 1 || d.Missing[0] != "parent_uid" || len(d.Unknown) != 1 || d.Unknown[0] != "brand_new" {
+		t.Fatalf("drift = %+v, want missing=[parent_uid] unknown=[brand_new]", d)
 	}
 	if !paprika.DetectDrift(string(paprika.Categories), nil).Empty() {
 		t.Fatal("no rows must mean no drift")

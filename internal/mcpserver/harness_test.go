@@ -91,8 +91,10 @@ func newHarness(t *testing.T, writes bool, opts ...func(*harness)) *harness {
 
 // reply is the union of the fields the tests look at across all tool outputs.
 type reply struct {
-	IsError bool `json:"-"`
-	OK      bool `json:"ok"`
+	IsError bool     `json:"-"`
+	Images  [][]byte `json:"-"` // image content blocks, decoded
+	Text    string   `json:"-"` // text content blocks
+	OK      bool     `json:"ok"`
 	Error   *struct {
 		Code      string `json:"code"`
 		Message   string `json:"message"`
@@ -114,11 +116,18 @@ type reply struct {
 			Raw, Quantity, Unit, Item, Note string
 			Heading                         bool
 		} `json:"ingredients_parsed"`
-		Categories []mcpserver.NamedRef
-		CachedAt   string `json:"cached_at"`
+		Categories    []mcpserver.NamedRef
+		CachedAt      string `json:"cached_at"`
+		Notes         string
+		Description   string
+		Directions    string
+		Rating        int
+		HasPhoto      bool `json:"has_photo"`
+		GalleryPhotos int  `json:"gallery_photos"`
 	} `json:"recipe"`
 	Total     int
 	Items     []item
+	Pantry    []item `json:"pantry_items"`
 	Lists     []mcpserver.GroceryListEntry
 	List      *mcpserver.NamedRef
 	From, To  string
@@ -130,10 +139,12 @@ type reply struct {
 	Healthy       bool
 	WritesEnabled bool `json:"writes_enabled"`
 
-	Proposal *mcpserver.ProposalView
-	Status   string
-	Verified bool
-	Skipped  []mcpserver.SkippedItem
+	Photo      *mcpserver.RecipePhoto
+	RecipeEdit *mcpserver.RecipeEditView `json:"recipe_edit"`
+	Proposal   *mcpserver.ProposalView
+	Status     string
+	Verified   bool
+	Skipped    []mcpserver.SkippedItem
 }
 
 // item covers pantry and grocery rows.
@@ -168,6 +179,14 @@ func (h *harness) call(name string, args map[string]any) reply {
 		h.t.Fatalf("%s: %v in %s", name, err, raw)
 	}
 	r.IsError = res.IsError
+	for _, c := range res.Content {
+		switch block := c.(type) {
+		case *mcp.ImageContent:
+			r.Images = append(r.Images, block.Data)
+		case *mcp.TextContent:
+			r.Text += block.Text
+		}
+	}
 	if r.IsError == r.OK || (r.Error == nil) != r.OK {
 		h.t.Fatalf("%s: inconsistent result: isError=%v ok=%v error=%v", name, r.IsError, r.OK, r.Error)
 	}

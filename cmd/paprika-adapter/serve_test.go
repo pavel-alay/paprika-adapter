@@ -153,7 +153,7 @@ func TestHTTPClientReadsAndWritesWithApproval(t *testing.T) {
 			defer session.Close()
 
 			tools, err := session.ListTools(ctx, nil)
-			if err != nil || len(tools.Tools) != 10 {
+			if err != nil || len(tools.Tools) != 13 {
 				t.Fatalf("tools = %v, err = %v", tools, err)
 			}
 			call := func(name string, args map[string]any) map[string]any {

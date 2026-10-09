@@ -3,7 +3,8 @@
 First step for any problem: ask the agent for `sync_status` (add `refresh: true` to test the connection now),
 or run `make sync`. Each collection reports `state`, `error.code` and `protocol_drift`.
 
-The adapter only reads from Paprika, except for the two create-only writes. The cache is disposable:
+The adapter only reads from Paprika, except for the three create-only writes (meal-plan entry, grocery
+items, pantry items) and the recipe edit (rating, notes, description, directions). The cache is disposable:
 deleting the `paprika-data` volume loses nothing that is not in Paprika.
 
 Restarting the adapter is `make restart`. It is needed after every change to `paprika.env`. Clients lose
@@ -64,7 +65,15 @@ it cannot overwrite an edit made in an app. What can still happen:
 | Recipe edited in the app, the client shows the old text | recipe hash not re-checked yet | wait `PAPRIKA_MAX_AGE` or refresh; the cached copy is replaced, never merged |
 | Recipes stuck `stale` with "N of M changed recipes could not be fetched" | some recipe fetches failed | it resumes on the next sync; persistent failure on the same recipes points at a protocol change |
 
-To undo a write, delete the item or meal in the Paprika app. v1 has no delete tool on purpose.
+To undo a write, delete the item or meal in the Paprika app. There is no delete tool on purpose.
+
+To undo a recipe edit, put the old value back: the result of the commit lists `from` for every changed field,
+and so does the proposal. Either edit the recipe in the app or propose the reverse edit. Old values are not
+kept anywhere else, so save that result if the text matters.
+
+A recipe edited through the adapter that looks wrong in an app (missing fields, endless re-syncing) points at
+the recipe write or its hash no longer matching what Paprika expects: set `PAPRIKA_ENABLE_WRITES=false`,
+`make restart`, and treat it as a protocol change (below).
 
 ## Protocol changes
 
@@ -74,6 +83,10 @@ Paprika can change its private API at any time. Signs, in rising order of severi
    Reads keep working; unknown fields are preserved in the cache and exports.
 2. `error.code: protocol_changed`: a response no longer parses. The affected collection stays `stale`.
 3. `rejected` on a write that used to work, or `write_not_verified` that does not clear.
+
+A photo that fails with `protocol_changed: photo link points at an unexpected host: <host>` means Paprika
+moved its photo storage. Nothing else is affected. Check the host is Paprika's, then add it next to
+`photoStoreHost` in `internal/paprika/photo.go`; do not make the check accept any host.
 
 What to do:
 
@@ -90,11 +103,12 @@ rather than failing. Treat any `missing_fields` as a reason to do steps 1 and 2.
 
 ## Verifying writes
 
-Opt-in test against the real account. It creates one grocery item and one meal, reads each back, then
-soft-deletes exactly those two rows the way the Paprika apps do, and checks they are gone.
+Opt-in test against the real account. It creates one grocery item, one meal and one pantry item, reads each
+back, then soft-deletes exactly those rows the way the Paprika apps do, and checks they are gone.
 
 1. In the Paprika app create a grocery list whose name contains `test` (for example `adapter-test`), and
-   optionally a throwaway recipe. Sync the app.
+   a throwaway recipe whose name contains `test` (it enables the recipe edit test, which changes its rating
+   and texts and then restores them). Sync the app.
 2. Find the uids: `list_grocery_lists` in the client, or `make sync` then `search_recipes`.
 3. Run on a machine with Go:
 
@@ -102,7 +116,8 @@ soft-deletes exactly those two rows the way the Paprika apps do, and checks they
 set -a; . ~/.config/paprika-adapter/paprika.env; set +a   # or export PAPRIKA_EMAIL / PAPRIKA_PASSWORD by hand
 PAPRIKA_IT_LIST_UID=<uid of the test list> \
 PAPRIKA_IT_MEAL_DATE=2027-12-31 \
-PAPRIKA_IT_RECIPE_UID=<optional uid of the throwaway recipe> \
+PAPRIKA_IT_RECIPE_UID=<uid of the throwaway recipe> \
+PAPRIKA_IT_PANTRY=1 \
 make integration
 ```
 

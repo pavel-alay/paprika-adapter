@@ -22,6 +22,7 @@ const (
 	Groceries          Collection = "groceries"
 	GroceryAisles      Collection = "groceryaisles"
 	GroceryIngredients Collection = "groceryingredients"
+	Photos             Collection = "photos" // gallery photo metadata; the images are fetched on demand
 )
 
 // Recipes is not a Collection: it is listed as uid+hash refs and fetched one by one.
@@ -29,7 +30,7 @@ const Recipes = "recipes"
 
 // Collections lists every replace-all collection the adapter reads, in sync order.
 var Collections = []Collection{
-	Categories, MealTypes, GroceryAisles, GroceryIngredients, GroceryLists, Groceries, Pantry, Meals,
+	Categories, MealTypes, GroceryAisles, GroceryIngredients, GroceryLists, Groceries, Pantry, Meals, Photos,
 }
 
 // Raw is one entity exactly as Paprika returned it. The JSON is stored verbatim so
@@ -67,6 +68,20 @@ type Recipe struct {
 	InTrash         bool     `json:"in_trash"`
 	OnFavorites     bool     `json:"on_favorites"`
 	Created         string   `json:"created"`
+	Photo           *string  `json:"photo"`       // file name of the cover thumbnail, nil when the recipe has no photo
+	PhotoHash       *string  `json:"photo_hash"`  // SHA-256 of the thumbnail
+	PhotoLarge      *string  `json:"photo_large"` // file name of the gallery photo that is the cover, if any
+	PhotoURL        *string  `json:"photo_url"`   // signed link to the thumbnail, valid for minutes
+}
+
+// Photo is one gallery photo of a recipe as listed by GET /sync/photos/.
+type Photo struct {
+	UID       string `json:"uid"`
+	RecipeUID string `json:"recipe_uid"`
+	Filename  string `json:"filename"`
+	Name      string `json:"name"`
+	OrderFlag int    `json:"order_flag"`
+	Hash      string `json:"hash"`
 }
 
 type Category struct {
@@ -168,8 +183,12 @@ var knownFields = map[string][]string{
 		"difficulty", "prep_time", "cook_time", "total_time", "source", "source_url", "image_url", "photo",
 		"photo_hash", "photo_large", "scale", "hash", "categories", "rating", "in_trash", "is_pinned",
 		"on_favorites", "on_grocery_list", "created", "photo_url",
+		// Seen on a real account on 2026-10-09, null on every recipe there, so their value types are unknown.
+		"prep_minutes", "cook_minutes", "total_minutes", "servings_min", "servings_max", "nutrition",
+		"cookbook_uid", "metadata_version",
 	},
-	string(Categories): {"uid", "name", "parent_uid", "order_flag"},
+	string(Categories): {"uid", "name", "parent_uid", "order_flag", "cookbook_uid"},
+	string(Photos):     {"uid", "recipe_uid", "filename", "name", "order_flag", "hash"},
 	string(Pantry): {
 		"uid", "ingredient", "aisle", "expiration_date", "has_expiration", "in_stock", "purchase_date",
 		"quantity", "aisle_uid", "location_uid", "notes",

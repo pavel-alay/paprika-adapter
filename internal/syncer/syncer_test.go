@@ -15,6 +15,11 @@ import (
 	"paprika-adapter/internal/syncer"
 )
 
+const (
+	roastUID = "014031E3-BC74-4CA8-B345-36EBE9C9794B"
+	soupUID  = "DF8BD763-2ADA-49E2-AA2C-05A47A81B007-6735-000003ABB738847D"
+)
+
 type harness struct {
 	fake  *paprikatest.Server
 	store *store.Store
@@ -63,7 +68,7 @@ func TestFirstSyncFillsEveryCollection(t *testing.T) {
 	h := newHarness(t, paprikatest.Password)
 	report := h.refresh(t)
 	want := map[string]int{"recipes": 6, "categories": 5, "pantry": 8, "meals": 5, "mealtypes": 4,
-		"grocerylists": 2, "groceries": 5, "groceryaisles": 6, "groceryingredients": 5}
+		"grocerylists": 2, "groceries": 5, "groceryaisles": 6, "groceryingredients": 5, "photos": 2}
 	for col, rows := range want {
 		f := report[col]
 		if f.State != syncer.StateFresh || f.Rows != rows || f.Error != nil || f.Drift != nil {
@@ -194,8 +199,8 @@ func TestInterruptedRecipeSyncResumes(t *testing.T) {
 	h.sync.RecipeWorkers = 1
 	h.fake.FailNext("GET /api/v2/sync/recipe/3B9E1D42-6A7C-4F85-9D20-1C8E5A4B7F63/", 500, 500, 500)
 	f := h.refresh(t)["recipes"]
-	if f.Rows != 5 || f.Error == nil || f.State == syncer.StateFresh {
-		t.Fatalf("recipes = %+v (error %+v), want 5 cached and an error", f, f.Error)
+	if f.Rows != 5 || f.Error == nil || f.State != syncer.StateEmpty {
+		t.Fatalf("recipes = %+v (error %+v), want 5 cached, an error, and never_synced: the first copy is incomplete", f, f.Error)
 	}
 	before := h.fake.Hits("GET /api/v2/sync/recipe/")
 	f = h.refresh(t)["recipes"]
@@ -227,5 +232,84 @@ func TestNewFieldFromPaprikaIsReportedAsDriftAndKept(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("unknown field was dropped from the cached row")
+	}
+}
+
+// Only changed recipes are downloaded, so drift must be judged over the cache:
+// a later batch without the new field must not make it look as if the field went away.
+func TestRecipeDriftCoversTheWholeCacheNotOnlyTheLastBatch(t *testing.T) {
+	h := newHarness(t, paprikatest.Password)
+	if f := h.refresh(t)["recipes"]; f.Drift != nil {
+		t.Fatalf("drift on the fixtures = %+v", f.Drift)
+	}
+	h.fake.UpdateRecipe(roastUID, "sous_vide_minutes", 90)
+	f := h.refresh(t)["recipes"]
+	if f.Drift == nil || len(f.Drift.Unknown) != 1 || f.Drift.Unknown[0] != "sous_vide_minutes" || len(f.Drift.Missing) != 0 {
+		t.Fatalf("drift = %+v, want unknown=[sous_vide_minutes]", f.Drift)
+	}
+	h.fake.UpdateRecipe(soupUID, "notes", "Better the next day.")
+	f = h.refresh(t)["recipes"]
+	if f.Drift == nil || len(f.Drift.Unknown) != 1 || f.Drift.Unknown[0] != "sous_vide_minutes" {
+		t.Fatalf("drift after an unrelated recipe changed = %+v, want it unchanged", f.Drift)
+	}
+}
+
+// After an upgrade that teaches the adapter new fields, the drift an older
+// build recorded must go away on the first sync, without downloading anything.
+func TestDriftRecordedByAnOlderBuildIsJudgedAgainAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, paprikatest.Password)
+	h.refresh(t)
+	stale := paprika.Drift{Unknown: []string{"cook_minutes"}}
+	for _, c := range []string{paprika.Recipes, string(paprika.Categories)} {
+		if err := h.store.SetDrift(ctx, c, stale); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f := h.refresh(t)["recipes"]; f.Drift == nil {
+		t.Fatal("the same process judged an unchanged collection again; that should happen once per start")
+	}
+
+	restarted := syncer.New(h.sync.Client, h.store, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	restarted.Now = h.sync.Now
+	before := h.fake.Hits("GET /api/v2/sync/recipe") + h.fake.Hits("GET /api/v2/sync/categories/")
+	for _, f := range restarted.Refresh(ctx, paprika.Recipes, string(paprika.Categories)) {
+		if f.Drift != nil || f.State != syncer.StateFresh {
+			t.Errorf("%s after restart = %+v, want fresh without drift", f.Collection, f)
+		}
+	}
+	if after := h.fake.Hits("GET /api/v2/sync/recipe") + h.fake.Hits("GET /api/v2/sync/categories/"); after != before {
+		t.Fatalf("judging drift again downloaded %d time(s)", after-before)
+	}
+}
+
+// Once a complete copy exists, a later partial failure leaves it usable as stale.
+func TestFailedRecipeUpdateAfterAFullSyncIsStaleNotEmpty(t *testing.T) {
+	h := newHarness(t, paprikatest.Password)
+	h.refresh(t)
+	h.fake.UpdateRecipe(roastUID, "notes", "Use the convection setting.")
+	h.fake.FailNext("GET /api/v2/sync/recipe/"+roastUID+"/", 500, 500, 500)
+	h.now = h.now.Add(time.Hour)
+	f := h.refresh(t)["recipes"]
+	if f.State != syncer.StateStale || f.Rows != 6 || f.Error == nil {
+		t.Fatalf("recipes = %+v (error %+v), want stale with 6 rows and an error", f, f.Error)
+	}
+}
+
+func TestStopWaitsForARunningSync(t *testing.T) {
+	h := newHarness(t, paprikatest.Password)
+	h.refresh(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	h.sync.Stop(ctx)
+	if ctx.Err() != nil {
+		t.Fatal("Stop did not return although no sync was running")
+	}
+	// Stopped: a budgeted call returns what is cached instead of syncing or hanging.
+	h.now = h.now.Add(time.Hour)
+	h.sync.Budget = 50 * time.Millisecond
+	before := h.fake.Hits("GET ")
+	if f := h.sync.Ensure(context.Background(), paprika.Recipes)[0]; f.State != syncer.StateStale || h.fake.Hits("GET ") != before {
+		t.Fatalf("after Stop: %+v, %d request(s) made", f, h.fake.Hits("GET ")-before)
 	}
 }

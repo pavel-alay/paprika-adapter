@@ -5,10 +5,15 @@
 package paprikatest
 
 import (
+	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,9 +34,12 @@ const (
 
 var (
 	collections = []string{
-		"categories", "pantry", "meals", "mealtypes", "grocerylists", "groceries", "groceryaisles", "groceryingredients",
+		"categories", "pantry", "meals", "mealtypes", "grocerylists", "groceries", "groceryaisles", "groceryingredients", "photos",
 	}
-	writable  = map[string]bool{"meals": true, "groceries": true}
+	// Thumbnail is what a recipe's photo link serves, FullPhoto what a gallery photo's link serves.
+	Thumbnail = testJPEG(32, 24)
+	FullPhoto = testJPEG(320, 240)
+	writable  = map[string]bool{"meals": true, "groceries": true, "pantry": true}
 	uidShape  = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	dayMarker = regexp.MustCompile(`@([DP])(\d+)`)
 )
@@ -55,6 +63,7 @@ type Server struct {
 	failures map[string][]int // "METHOD path" -> queued HTTP statuses
 	dropAck  int              // writes to apply and then answer with 502
 	down     bool             // answer everything with 503
+	epoch    int              // photo links issued under an older epoch have expired
 }
 
 // New starts a fake seeded with the fixtures. Meal dates are laid out around the
@@ -68,8 +77,67 @@ func New(now time.Time) *Server {
 		s.counters[c] = 1
 	}
 	s.counters["recipes"] = 1
+	for _, rec := range s.recipes {
+		if rec["photo"] != nil {
+			rec["photo_hash"] = fmt.Sprintf("%X", sha256.Sum256(Thumbnail))
+		}
+	}
 	s.URL = "https://paprika.test"
 	return s
+}
+
+func testJPEG(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.Set(x, y, color.RGBA{R: uint8(x * 7), G: uint8(y * 9), B: 120, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// ExpirePhotoLinks makes every photo link issued so far stop working, the way
+// Paprika's signed links do after a few minutes.
+func (s *Server) ExpirePhotoLinks() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.epoch++
+}
+
+func (s *Server) photoLink(file string) string {
+	return fmt.Sprintf("%s/photos/%s?Expires=%d&Signature=fixture-signature-do-not-log", s.URL, file, s.epoch)
+}
+
+// servePhoto plays the photo store: no API token wanted, only an unexpired link.
+func (s *Server) servePhoto(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "" {
+		http.Error(w, "the account token was sent to the photo store", http.StatusBadRequest)
+		return
+	}
+	if r.URL.Query().Get("Expires") != strconv.Itoa(s.epoch) {
+		http.Error(w, "Request has expired", http.StatusForbidden)
+		return
+	}
+	file := strings.TrimPrefix(r.URL.Path, "/photos/")
+	for _, rec := range s.recipes {
+		if rec["photo"] == file {
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write(Thumbnail)
+			return
+		}
+	}
+	for _, p := range s.rows["photos"] {
+		if p["filename"] == file {
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write(FullPhoto)
+			return
+		}
+	}
+	http.Error(w, "NoSuchKey", http.StatusNotFound)
 }
 
 // Client returns an HTTP client whose requests are answered by this fake in-process.
@@ -257,6 +325,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.login(w, r)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/photos/") && r.Method == http.MethodGet {
+		s.servePhoto(w, r)
+		return
+	}
 	rest, ok := strings.CutPrefix(r.URL.Path, "/api/v2/sync/")
 	if !ok {
 		fail(w, http.StatusNotFound, "Not found.")
@@ -279,11 +351,28 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(name, "recipe/"):
 		for _, rec := range s.recipes {
 			if rec["uid"] == strings.TrimPrefix(name, "recipe/") {
-				result(w, rec)
+				out := row{}
+				for k, v := range rec {
+					out[k] = v
+				}
+				if file, ok := rec["photo"].(string); ok {
+					out["photo_url"] = s.photoLink(file)
+				}
+				result(w, out)
 				return
 			}
 		}
 		fail(w, http.StatusOK, "Recipe not found.")
+	case r.Method == http.MethodPost && strings.HasPrefix(name, "recipe/"):
+		s.writeRecipe(w, r, strings.TrimPrefix(name, "recipe/"))
+	case r.Method == http.MethodGet && strings.HasPrefix(name, "photo/"):
+		for _, p := range live(s.rows["photos"]) {
+			if p["uid"] == strings.TrimPrefix(name, "photo/") {
+				result(w, row{"photo_url": s.photoLink(p["filename"].(string))})
+				return
+			}
+		}
+		fail(w, http.StatusOK, "Photo not found.")
 	case r.Method == http.MethodGet && s.rows[name] != nil:
 		result(w, live(s.rows[name]))
 	case r.Method == http.MethodPost && writable[name]:
@@ -309,6 +398,66 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	s.tokenSeq++
 	s.token = fmt.Sprintf("fixture-token-%d-do-not-log", s.tokenSeq)
 	result(w, row{"token": s.token})
+}
+
+// writeRecipe replaces a whole recipe with the single object posted to its URL,
+// the way Paprika does: whatever the body leaves out is gone afterwards.
+func (s *Server) writeRecipe(w http.ResponseWriter, r *http.Request, uid string) {
+	file, _, err := r.FormFile("data")
+	if err != nil {
+		fail(w, http.StatusBadRequest, "Missing data.")
+		return
+	}
+	defer file.Close()
+	zr, err := gzip.NewReader(file)
+	if err != nil {
+		fail(w, http.StatusBadRequest, "Invalid data.")
+		return
+	}
+	raw, _ := io.ReadAll(zr)
+	var rec row
+	if err := json.Unmarshal(raw, &rec); err != nil || rec["uid"] != uid {
+		fail(w, http.StatusBadRequest, "Invalid data.")
+		return
+	}
+	if hash, _ := rec["hash"].(string); len(hash) != 64 {
+		fail(w, http.StatusOK, "Invalid hash.")
+		return
+	}
+	delete(rec, "deleted")
+	rec["on_grocery_list"] = false
+	s.counters["recipes"]++
+	replaced := false
+	for i, old := range s.recipes {
+		if old["uid"] == uid {
+			s.recipes[i], replaced = rec, true
+		}
+	}
+	if !replaced {
+		s.recipes = append(s.recipes, rec)
+	}
+	if s.dropAck > 0 {
+		s.dropAck--
+		fail(w, http.StatusBadGateway, "Bad Gateway")
+		return
+	}
+	result(w, true)
+}
+
+// Recipe returns a copy of one recipe as the fake currently holds it.
+func (s *Server) Recipe(uid string) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, rec := range s.recipes {
+		if rec["uid"] == uid {
+			out := row{}
+			for k, v := range rec {
+				out[k] = v
+			}
+			return out
+		}
+	}
+	return nil
 }
 
 // write accepts the only body shape Paprika accepts: multipart part "data"
@@ -364,6 +513,7 @@ func withReadDefaults(collection string, r row) row {
 	defaults := map[string]row{
 		"meals":     {"is_ingredient": false, "scale": nil},
 		"groceries": {"recipe_uid": nil},
+		"pantry":    {"location_uid": nil, "notes": nil},
 	}
 	for k, v := range defaults[collection] {
 		if _, ok := r[k]; !ok {

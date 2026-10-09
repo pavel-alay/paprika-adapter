@@ -3,6 +3,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -50,6 +51,7 @@ func New(d Deps) *mcp.Server {
 		Instructions: "Read-only view of one household's Paprika 3 account (recipes, pantry, meal plan, grocery lists) " +
 			"served from a local cache. Every result carries a sync block: treat state=stale as possibly outdated and say so. " +
 			"Writes, when enabled, are two-step: propose, show the summary to the user, and call commit_proposal only after they approve. " +
+			"Writes add rows, except propose_recipe_edit, which overwrites fields of an existing recipe. " +
 			"If the client supports MCP elicitation the user is also asked directly before anything is written.",
 	})
 
@@ -57,6 +59,9 @@ func New(d Deps) *mcp.Server {
 		"Full-text search over cached Paprika recipes. Returns compact summaries; use get_recipe for ingredients and directions."), s.searchRecipes)
 	add(srv, readTool("get_recipe", "Get recipe",
 		"Full details of one recipe by uid, including Paprika's raw ingredient text and a best-effort parsed version of it."), s.getRecipe)
+	add(srv, readTool("get_recipe_photo", "Get recipe photo",
+		"A recipe's photo as an image. By default the small cover thumbnail; size=full returns a full-resolution gallery photo, "+
+			"which only some recipes have. get_recipe says whether a recipe has a photo and how many gallery photos."), s.getRecipePhoto)
 	add(srv, readTool("list_pantry", "List pantry",
 		"Pantry items from Paprika, optionally filtered by ingredient text or stock status."), s.listPantry)
 	add(srv, readTool("get_meal_plan", "Get meal plan",
@@ -71,13 +76,21 @@ func New(d Deps) *mcp.Server {
 	if d.WritesEnabled {
 		add(srv, writeTool("propose_meal_plan_entry", "Propose meal plan entry",
 			"Prepare ONE meal-plan entry for a date. Writes nothing. Returns a proposal_id and a summary to show the user; "+
-				"the entry is created only by commit_proposal.", false), s.proposeMeal)
+				"the entry is created only by commit_proposal.", false, false), s.proposeMeal)
 		add(srv, writeTool("propose_grocery_items", "Propose grocery items",
 			"Prepare items to add to one grocery list. Writes nothing. Items already on the list (unpurchased, same name) are skipped "+
-				"unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false), s.proposeGroceries)
+				"unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false, false), s.proposeGroceries)
+		add(srv, writeTool("propose_pantry_items", "Propose pantry items",
+			"Prepare items to add to the Paprika pantry, as in stock and bought today. Writes nothing. Ingredients already in the pantry "+
+				"are skipped unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false, false), s.proposePantry)
+		add(srv, writeTool("propose_recipe_edit", "Propose recipe edit",
+			"Prepare a change to an existing recipe: its star rating, notes, description or directions. Writes nothing. "+
+				"A given field REPLACES what the recipe has; append_note adds to the notes instead. Returns a proposal_id, a summary "+
+				"and the old and new value of every field to show the user.", false, false), s.proposeRecipeEdit)
 		add(srv, writeTool("commit_proposal", "Commit proposal",
 			"Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports "+
-				"MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates.", true), s.commitProposal)
+				"MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates. "+
+				"Committing a recipe edit overwrites the edited fields of that recipe.", true, true), s.commitProposal)
 	}
 	return srv
 }
@@ -87,10 +100,11 @@ func readTool(name, title, description string) *mcp.Tool {
 		Annotations: &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true}}
 }
 
-func writeTool(name, title, description string, touchesPaprika bool) *mcp.Tool {
-	no := false
+// writeTool describes a tool of the write path. overwrites is true for one that
+// can replace existing content, as opposed to only adding rows.
+func writeTool(name, title, description string, touchesPaprika, overwrites bool) *mcp.Tool {
 	return &mcp.Tool{Name: name, Title: title, Description: description,
-		Annotations: &mcp.ToolAnnotations{Title: title, IdempotentHint: true, DestructiveHint: &no, OpenWorldHint: &touchesPaprika}}
+		Annotations: &mcp.ToolAnnotations{Title: title, IdempotentHint: true, DestructiveHint: &overwrites, OpenWorldHint: &touchesPaprika}}
 }
 
 // Meta is the common head of every tool result.
@@ -126,8 +140,9 @@ type envelope interface{ meta() *Meta }
 // call gives a handler access to the request it is serving, and lets it put a
 // question to the client (ask) instead of finishing.
 type call struct {
-	req *mcp.CallToolRequest
-	ask mcp.InputRequestMap
+	req     *mcp.CallToolRequest
+	ask     mcp.InputRequestMap
+	content []mcp.Content // extra blocks for the reply, such as an image
 }
 
 type callKey struct{}
@@ -147,7 +162,16 @@ func add[In, Out any, P interface {
 		}
 		m := P(&out).meta()
 		m.OK, m.Error = terr == nil, terr
-		return &mcp.CallToolResult{IsError: terr != nil}, out, nil
+		res := &mcp.CallToolResult{IsError: terr != nil}
+		if terr == nil && c.content != nil {
+			// With content of its own the SDK adds no text copy of the result, so add it here.
+			text, err := json.Marshal(out)
+			if err != nil {
+				return nil, out, err
+			}
+			res.Content = append([]mcp.Content{&mcp.TextContent{Text: string(text)}}, c.content...)
+		}
+		return res, out, nil
 	})
 }
 

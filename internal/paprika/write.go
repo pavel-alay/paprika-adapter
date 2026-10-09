@@ -44,6 +44,20 @@ type NewGroceryItem struct {
 	OrderFlag   int     `json:"order_flag"`
 }
 
+// NewPantryItem is one pantry item to create. Like the macOS client, the write
+// carries no notes field.
+type NewPantryItem struct {
+	UID            string  `json:"uid"`
+	Ingredient     string  `json:"ingredient"`
+	Quantity       string  `json:"quantity"`
+	Aisle          string  `json:"aisle"`
+	AisleUID       string  `json:"aisle_uid"` // "" when no aisle is known, the way Paprika stores it
+	InStock        bool    `json:"in_stock"`
+	HasExpiration  bool    `json:"has_expiration"`
+	ExpirationDate *string `json:"expiration_date"` // "YYYY-MM-DD 00:00:00"
+	PurchaseDate   string  `json:"purchase_date"`   // "YYYY-MM-DD 00:00:00"
+}
+
 type mealWire struct {
 	NewMeal
 	Deleted bool `json:"deleted"`
@@ -82,6 +96,27 @@ func (c *Client) AddGroceryItems(ctx context.Context, items []NewGroceryItem) er
 	return c.upsert(ctx, Groceries, wire)
 }
 
+type pantryWire struct {
+	NewPantryItem
+	Deleted bool `json:"deleted"`
+}
+
+// AddPantryItems creates pantry items in one request. The same uid caveat as
+// AddMeal applies to every item.
+func (c *Client) AddPantryItems(ctx context.Context, items []NewPantryItem) error {
+	if len(items) == 0 {
+		return &Error{Kind: KindInvalid, Op: "add pantry items", Message: "no items"}
+	}
+	wire := make([]pantryWire, 0, len(items))
+	for _, it := range items {
+		if err := checkNewUID("add pantry items", it.UID); err != nil {
+			return err
+		}
+		wire = append(wire, pantryWire{NewPantryItem: it})
+	}
+	return c.upsert(ctx, Pantry, wire)
+}
+
 func checkNewUID(op, uid string) error {
 	if !uidPattern.MatchString(uid) {
 		return &Error{Kind: KindInvalid, Op: op, Message: "uid is not an uppercase canonical UUID"}
@@ -89,24 +124,28 @@ func checkNewUID(op, uid string) error {
 	return nil
 }
 
-// upsert posts rows to a collection endpoint as a gzipped JSON array in a
-// multipart part named "data". It is sent once and never retried here.
+// upsert posts rows to a collection endpoint as a JSON array.
 func (c *Client) upsert(ctx context.Context, col Collection, rows any) error {
-	path := syncPath + string(col) + "/"
-	op := "POST " + path
-	payload, err := json.Marshal(rows)
+	return c.postData(ctx, syncPath+string(col)+"/", "file", rows)
+}
+
+// postData posts payload the only way Paprika accepts a write: gzipped JSON in
+// a multipart part named "data". It is sent once and never retried here.
+func (c *Client) postData(ctx context.Context, path, filename string, payload any) error {
+	op := "POST " + opPath(path)
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		return &Error{Kind: KindInvalid, Op: op, Message: "rows are not serialisable"}
 	}
 	var gz bytes.Buffer
 	zw := gzip.NewWriter(&gz)
-	_, _ = zw.Write(payload)
+	_, _ = zw.Write(raw)
 	if err := zw.Close(); err != nil {
 		return &Error{Kind: KindInvalid, Op: op, Message: "cannot compress rows"}
 	}
 	var form bytes.Buffer
 	mw := multipart.NewWriter(&form)
-	part, err := mw.CreateFormFile("data", "file")
+	part, err := mw.CreateFormFile("data", filename)
 	if err == nil {
 		_, err = part.Write(gz.Bytes())
 	}

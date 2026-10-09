@@ -98,6 +98,8 @@ type RecipeDetail struct {
 	Rating            int                `json:"rating" jsonschema:"0 = unrated, otherwise 1 to 5"`
 	Favorite          bool               `json:"favorite"`
 	InTrash           bool               `json:"in_trash"`
+	HasPhoto          bool               `json:"has_photo" jsonschema:"true when get_recipe_photo can return a cover thumbnail"`
+	GalleryPhotos     int                `json:"gallery_photos" jsonschema:"number of full-resolution photos get_recipe_photo can return with size=full"`
 	Created           string             `json:"created,omitempty" jsonschema:"creation time as stored by Paprika, YYYY-MM-DD HH:MM:SS, time zone unspecified"`
 	CachedAt          string             `json:"cached_at" jsonschema:"RFC 3339 UTC time this copy was fetched from Paprika"`
 }
@@ -112,7 +114,7 @@ func (s *server) getRecipe(ctx context.Context, in GetRecipeIn, out *GetRecipeOu
 	if uid == "" {
 		return invalid("uid is required")
 	}
-	if terr := s.ensure(ctx, &out.Meta, paprika.Recipes, string(paprika.Categories)); terr != nil {
+	if terr := s.ensure(ctx, &out.Meta, paprika.Recipes, string(paprika.Categories), string(paprika.Photos)); terr != nil {
 		return terr
 	}
 	cached, ok, err := s.Store.Recipe(ctx, uid)
@@ -130,12 +132,17 @@ func (s *server) getRecipe(ctx context.Context, in GetRecipeIn, out *GetRecipeOu
 	if err != nil {
 		return fromErr(err)
 	}
+	gallery, err := s.gallery(ctx, uid)
+	if err != nil {
+		return fromErr(err)
+	}
 	d := &RecipeDetail{
 		UID: r.UID, Name: r.Name, Hash: r.Hash, IngredientsRaw: r.Ingredients, IngredientsParsed: ingredients.Parse(r.Ingredients),
 		Directions: r.Directions, Description: r.Description, Notes: r.Notes, NutritionalInfo: r.NutritionalInfo,
 		Servings: r.Servings, Difficulty: r.Difficulty, PrepTime: r.PrepTime, CookTime: r.CookTime, TotalTime: r.TotalTime,
 		Source: r.Source, SourceURL: r.SourceURL, Categories: []NamedRef{}, Rating: r.Rating, Favorite: r.OnFavorites,
 		InTrash: r.InTrash, Created: r.Created, CachedAt: cached.FetchedAt.UTC().Format(time.RFC3339),
+		HasPhoto: deref(r.Photo) != "", GalleryPhotos: len(gallery),
 	}
 	for _, c := range r.Categories {
 		if name, ok := cats[c]; ok {

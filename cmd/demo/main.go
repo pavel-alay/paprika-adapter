@@ -128,6 +128,9 @@ func run(adapter string, live, yes, raw bool, query, listName string, maxItems i
 	defer session.Close()
 	fmt.Println("    demo's token -> connected")
 	d := &demo{ctx: ctx, session: session, raw: raw, stop: stop}
+	if err := d.waitForFirstSync(); err != nil {
+		return err
+	}
 
 	d.step(1, "Find a recipe")
 	found := d.call("search_recipes", map[string]any{"query": query, "limit": 3})
@@ -259,6 +262,40 @@ type demo struct {
 	session *mcp.ClientSession
 	raw     bool
 	stop    func() // ends the adapter process
+}
+
+// waitForFirstSync blocks until every collection has a complete cached copy.
+// On a real account the first recipe download takes longer than one tool call may.
+func (d *demo) waitForFirstSync() error {
+	announced := false
+	for deadline := time.Now().Add(5 * time.Minute); time.Now().Before(deadline); time.Sleep(3 * time.Second) {
+		res, err := d.session.CallTool(d.ctx, &mcp.CallToolParams{Name: "sync_status"})
+		if err != nil {
+			return err
+		}
+		raw, _ := json.Marshal(res.StructuredContent)
+		var status map[string]any
+		_ = json.Unmarshal(raw, &status)
+		pending := ""
+		for _, f := range list(status, "sync") {
+			if f["state"] != "never_synced" {
+				continue
+			}
+			pending = fmt.Sprintf("%s (%v rows so far)", f["collection"], f["rows"])
+			if e, ok := f["error"].(map[string]any); ok && e["code"] != "upstream_unavailable" {
+				return fmt.Errorf("first sync of %s failed: %v: %v", f["collection"], e["code"], e["message"])
+			}
+		}
+		if pending == "" {
+			return nil
+		}
+		if !announced {
+			fmt.Println("    waiting for the adapter's first sync with Paprika ...")
+			announced = true
+		}
+		fmt.Printf("    still syncing: %s\n", pending)
+	}
+	return fmt.Errorf("the first sync did not finish within 5 minutes")
 }
 
 func (d *demo) step(n int, title string) { fmt.Printf("\n== Step %d: %s\n", n, title) }

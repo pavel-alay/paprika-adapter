@@ -54,15 +54,19 @@ func (s *server) listPantry(ctx context.Context, in ListPantryIn, out *ListPantr
 		if len(out.Items) == limit {
 			continue
 		}
-		e := PantryEntry{UID: p.UID, Ingredient: p.Ingredient, Quantity: p.Quantity, Aisle: p.Aisle, InStock: p.InStock,
-			PurchaseDate: dateOnly(deref(p.PurchaseDate))}
-		if p.HasExpiration {
-			e.ExpirationDate = dateOnly(deref(p.ExpirationDate))
-		}
-		out.Items = append(out.Items, e)
+		out.Items = append(out.Items, pantryEntry(p))
 	}
 	out.Truncated = out.Total > len(out.Items)
 	return nil
+}
+
+func pantryEntry(p paprika.PantryItem) PantryEntry {
+	e := PantryEntry{UID: p.UID, Ingredient: p.Ingredient, Quantity: p.Quantity, Aisle: p.Aisle, InStock: p.InStock,
+		PurchaseDate: dateOnly(deref(p.PurchaseDate))}
+	if p.HasExpiration {
+		e.ExpirationDate = dateOnly(deref(p.ExpirationDate))
+	}
+	return e
 }
 
 type GetMealPlanIn struct {

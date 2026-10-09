@@ -3,30 +3,35 @@
     "uid": "2D6BB5F8-909E-4B2B-9E67-9668C2737639",
     "order_flag": 0,
     "name": "Dinner",
-    "parent_uid": null
+    "parent_uid": null,
+    "cookbook_uid": null
   },
   {
     "uid": "647E822C-434E-42D4-94A7-C42CC34A0246",
     "order_flag": 1,
     "name": "Vegetarian",
-    "parent_uid": null
+    "parent_uid": null,
+    "cookbook_uid": null
   },
   {
     "uid": "9A1F5C3E-7B24-4D10-8E6A-51C0D2A7F3B1",
     "order_flag": 2,
     "name": "Soup",
-    "parent_uid": null
+    "parent_uid": null,
+    "cookbook_uid": null
   },
   {
     "uid": "C3D7A9B0-1E5F-4A62-B8D4-6F2E0A1C9B57",
     "order_flag": 3,
     "name": "Breakfast",
-    "parent_uid": null
+    "parent_uid": null,
+    "cookbook_uid": null
   },
   {
     "uid": "E81B2F64-0C3A-49D7-A5E2-7D9C4B6F1A08",
     "order_flag": 4,
     "name": "Baking",
-    "parent_uid": null
+    "parent_uid": null,
+    "cookbook_uid": null
   }
 ]

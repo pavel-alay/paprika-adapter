@@ -30,7 +30,7 @@ func toolNames(t *testing.T, h *harness) []string {
 
 func TestReadOnlyServerExposesNoWriteTools(t *testing.T) {
 	got := strings.Join(toolNames(t, newHarness(t, false)), " ")
-	want := "get_meal_plan get_recipe list_grocery_items list_grocery_lists list_pantry search_recipes sync_status"
+	want := "get_meal_plan get_recipe get_recipe_photo list_grocery_items list_grocery_lists list_pantry search_recipes sync_status"
 	if got != want {
 		t.Fatalf("tools = %s\n want  %s", got, want)
 	}
@@ -38,13 +38,18 @@ func TestReadOnlyServerExposesNoWriteTools(t *testing.T) {
 
 func TestWriteServerAddsOnlyProposeAndCommit(t *testing.T) {
 	names := toolNames(t, newHarness(t, true))
-	if len(names) != 10 {
-		t.Fatalf("tools = %v, want 10", names)
+	if len(names) != 13 {
+		t.Fatalf("tools = %v, want 13", names)
 	}
+	// The one tool that changes existing data is the recipe edit the household asked for:
+	// rating, notes, description and directions. Nothing deletes, and nothing else edits.
 	for _, n := range names {
+		if n == "propose_recipe_edit" {
+			continue
+		}
 		for _, banned := range []string{"delete", "remove", "update", "edit", "clear", "bulk"} {
 			if strings.Contains(n, banned) {
-				t.Errorf("v1 must not expose %s", n)
+				t.Errorf("must not expose %s", n)
 			}
 		}
 	}
@@ -194,7 +199,7 @@ func TestOutageServesCacheMarkedStale(t *testing.T) {
 	}
 
 	st := h.ok("sync_status", nil)
-	if st.Healthy || len(st.Sync) != 9 {
+	if st.Healthy || len(st.Sync) != 10 {
 		t.Fatalf("sync_status healthy=%v collections=%d", st.Healthy, len(st.Sync))
 	}
 }
@@ -246,5 +251,25 @@ func TestSecretsNeverReachRepliesOrLogs(t *testing.T) {
 		if strings.Contains(h.replies.String(), secret) {
 			t.Errorf("%q leaked into a tool reply", secret)
 		}
+	}
+}
+
+// A first sync that fetched only some recipes must not be searched as if it
+// were the whole collection: "no match" would be a wrong answer.
+func TestIncompleteFirstSyncIsNotAnsweredFrom(t *testing.T) {
+	h := newHarness(t, false)
+	h.fake.FailNext("GET /api/v2/sync/recipe/"+roastUID+"/", 500, 500, 500)
+	r := h.fails("search_recipes", map[string]any{"query": "lentil"}, "upstream_unavailable")
+	if !r.Error.Retryable || len(r.Recipes) != 0 {
+		t.Fatalf("error = %+v, recipes = %v", r.Error, r.Recipes)
+	}
+	for _, f := range r.Sync {
+		if f.Collection == "recipes" && (f.State != syncer.StateEmpty || f.Rows != 5) {
+			t.Fatalf("recipes = %+v, want never_synced with the 5 rows fetched so far", f)
+		}
+	}
+	h.now = h.now.Add(time.Minute) // past the wait after a failure
+	if r := h.ok("search_recipes", map[string]any{"query": "lentil"}); r.TotalMatches != 1 {
+		t.Fatalf("after the sync completed: %d matches", r.TotalMatches)
 	}
 }

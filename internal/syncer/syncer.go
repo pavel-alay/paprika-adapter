@@ -4,6 +4,7 @@ package syncer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,9 @@ type Syncer struct {
 	RecipeWorkers int
 
 	busy chan struct{} // holds one token while a sync runs
+	// judged names the collections whose drift this process has derived itself. Until then the
+	// recorded drift may come from a build that knew fewer fields. Guarded by busy.
+	judged map[string]bool
 }
 
 // New returns a Syncer with defaults suited to one household account.
@@ -35,7 +39,7 @@ func New(client *paprika.Client, st *store.Store, log *slog.Logger) *Syncer {
 	return &Syncer{
 		Client: client, Store: st, Log: log, Now: time.Now,
 		MaxAge: 5 * time.Minute, CounterTrust: 6 * time.Hour, FailureWait: 30 * time.Second,
-		Budget: 25 * time.Second, RecipeWorkers: 4, busy: make(chan struct{}, 1),
+		Budget: 25 * time.Second, RecipeWorkers: 4, busy: make(chan struct{}, 1), judged: map[string]bool{},
 	}
 }
 
@@ -63,6 +67,15 @@ func (s *Syncer) Ensure(ctx context.Context, collections ...string) []Freshness 
 func (s *Syncer) Refresh(ctx context.Context, collections ...string) []Freshness {
 	s.sync(ctx, collections, true)
 	return s.Freshness(ctx, collections...)
+}
+
+// Stop waits, until ctx ends, for a running sync to finish and keeps another
+// from starting. Call it before closing the cache.
+func (s *Syncer) Stop(ctx context.Context) {
+	select {
+	case s.busy <- struct{}{}:
+	case <-ctx.Done():
+	}
 }
 
 // Run refreshes everything now and then every interval until ctx ends.
@@ -114,7 +127,11 @@ func (s *Syncer) sync(ctx context.Context, collections []string, force bool) {
 		counter, known := counters[c]
 		unchanged := known && st.Counter.Valid && st.Counter.Int64 == counter
 		if unchanged && !st.LastFetchedAt.IsZero() && now.Sub(st.LastFetchedAt) < s.CounterTrust {
-			if err := s.Store.MarkChecked(ctx, c, now); err != nil {
+			err := s.Store.MarkChecked(ctx, c, now)
+			if err == nil && !s.judged[c] {
+				err = s.rejudge(ctx, c)
+			}
+			if err != nil {
 				s.Log.Error("cache write failed", "collection", c, "error", err.Error())
 			}
 			continue
@@ -123,15 +140,59 @@ func (s *Syncer) sync(ctx context.Context, collections []string, force bool) {
 		if known {
 			ptr = &counter
 		}
-		if err := s.fetch(ctx, c, ptr, st); err != nil {
+		if err := s.fetch(ctx, c, ptr); err != nil {
 			s.failed(ctx, c, err)
+			continue
 		}
+		s.judged[c] = true
 	}
 }
 
-func (s *Syncer) fetch(ctx context.Context, collection string, counter *int64, prev store.SyncState) error {
+// rejudge derives a collection's drift again from its cached rows, without downloading anything.
+func (s *Syncer) rejudge(ctx context.Context, collection string) error {
+	drift, err := s.cachedDrift(ctx, collection)
+	if err != nil {
+		return err
+	}
+	if err := s.Store.SetDrift(ctx, collection, drift); err != nil {
+		return err
+	}
+	s.judged[collection] = true
+	s.warnDrift(collection, drift)
+	return nil
+}
+
+// cachedDrift compares every cached row of a collection with the fields this build knows.
+func (s *Syncer) cachedDrift(ctx context.Context, collection string) (paprika.Drift, error) {
+	var (
+		rows []json.RawMessage
+		err  error
+	)
 	if collection == paprika.Recipes {
-		return s.fetchRecipes(ctx, counter, prev)
+		rows, err = s.Store.AllRecipes(ctx)
+	} else {
+		rows, err = s.Store.Entities(ctx, paprika.Collection(collection))
+	}
+	if err != nil {
+		return paprika.Drift{}, err
+	}
+	raws := make([]paprika.Raw, len(rows))
+	for i, r := range rows {
+		raws[i] = paprika.Raw{JSON: r}
+	}
+	return paprika.DetectDrift(collection, raws), nil
+}
+
+func (s *Syncer) warnDrift(collection string, drift paprika.Drift) {
+	if drift.Empty() {
+		return
+	}
+	s.Log.Warn("paprika protocol drift", "collection", collection, "unknown", drift.Unknown, "missing", drift.Missing)
+}
+
+func (s *Syncer) fetch(ctx context.Context, collection string, counter *int64) error {
+	if collection == paprika.Recipes {
+		return s.fetchRecipes(ctx, counter)
 	}
 	if _, err := s.Pull(ctx, paprika.Collection(collection), counter); err != nil {
 		return err
@@ -153,15 +214,13 @@ func (s *Syncer) Pull(ctx context.Context, col paprika.Collection, counter *int6
 		return nil, err
 	}
 	drift := paprika.DetectDrift(string(col), rows)
-	if !drift.Empty() {
-		s.Log.Warn("paprika protocol drift", "collection", string(col), "unknown", drift.Unknown, "missing", drift.Missing)
-	}
+	s.warnDrift(string(col), drift)
 	return rows, s.Store.MarkFetched(ctx, string(col), counter, drift, s.Now())
 }
 
 // fetchRecipes downloads only recipes whose hash differs from the cached one.
 // Each recipe is stored as it arrives, so an interrupted sync resumes where it stopped.
-func (s *Syncer) fetchRecipes(ctx context.Context, counter *int64, prev store.SyncState) error {
+func (s *Syncer) fetchRecipes(ctx context.Context, counter *int64) error {
 	refs, err := s.Client.RecipeRefs(ctx)
 	if err != nil {
 		return err
@@ -225,13 +284,12 @@ func (s *Syncer) fetchRecipes(ctx context.Context, counter *int64, prev store.Sy
 			Message: fmt.Sprintf("%d of %d changed recipes could not be fetched; the rest are cached", pending, len(wanted)),
 		}
 	}
-	drift := prev.Drift
-	if len(fetched) > 0 {
-		drift = paprika.DetectDrift(paprika.Recipes, fetched)
+	// Judged over the whole cache: the recipes fetched just now are only the ones that changed.
+	drift, err := s.cachedDrift(ctx, paprika.Recipes)
+	if err != nil {
+		return err
 	}
-	if !drift.Empty() {
-		s.Log.Warn("paprika protocol drift", "collection", paprika.Recipes, "unknown", drift.Unknown, "missing", drift.Missing)
-	}
+	s.warnDrift(paprika.Recipes, drift)
 	s.Log.Info("recipes synced", "listed", len(refs), "fetched", len(fetched), "removed", len(removed))
 	return s.Store.MarkFetched(ctx, paprika.Recipes, counter, drift, s.Now())
 }

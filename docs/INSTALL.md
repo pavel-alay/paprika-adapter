@@ -4,12 +4,7 @@ The adapter runs as one long-lived container and serves MCP (streamable HTTP) at
 Every request must carry a bearer token; each person or agent gets their own. The container runs as uid
 65532 with a read-only root filesystem, no capabilities, and one named volume for the cache.
 
-Requirements: Linux on arm64 (aarch64), Docker, outbound HTTPS to `www.paprikaapp.com`.
-
-> The image build and `make up` have not been run by the author of this change (no Docker daemon was
-> available). The binary was run directly, serving HTTP with token authentication (see [DEMO.md](DEMO.md)),
-> the static `linux/arm64` binary was built, and both base image tags were confirmed to exist.
-> If `make image` or `make up` fails, please report the output.
+Requirements: Linux on arm64 (aarch64), Docker, outbound HTTPS to `www.paprikaapp.com` and, for recipe photos, to `s3.amazonaws.com`.
 
 ## 1. Build the image
 
@@ -127,7 +122,8 @@ Only after step 3 is clean and the read tools have been used for a while:
 3. Set `PAPRIKA_ENABLE_WRITES=true` in `paprika.env`, and `PAPRIKA_APPROVAL=human` if nothing may be written
    without a person pressing approve in the client that asked. `make restart`, then reload the client.
 
-Three more tools appear: `propose_meal_plan_entry`, `propose_grocery_items`, `commit_proposal`. Each write is
+Five more tools appear: `propose_meal_plan_entry`, `propose_grocery_items`, `propose_pantry_items`,
+`propose_recipe_edit`, `commit_proposal`. Each write is
 logged with the name of the client that made it (`tool=commit_proposal client=anna outcome=ok`).
 
 ## Without Docker

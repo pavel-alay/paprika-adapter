@@ -15,6 +15,8 @@ import (
 const (
 	kindMeal      = "meal_plan_entry"
 	kindGroceries = "grocery_items"
+	kindPantry    = "pantry_items"
+	kindRecipe    = "recipe_edit"
 
 	maxGroceryItems = 25
 	maxTextLen      = 200
@@ -27,19 +29,23 @@ type payload struct {
 	Meal            *paprika.NewMeal         `json:"meal,omitempty"`
 	List            *NamedRef                `json:"list,omitempty"`
 	Items           []paprika.NewGroceryItem `json:"items,omitempty"`
+	Pantry          []paprika.NewPantryItem  `json:"pantry,omitempty"`
+	Recipe          *recipeEdit              `json:"recipe,omitempty"`
 	Skipped         []SkippedItem            `json:"skipped,omitempty"`
 	AllowDuplicates bool                     `json:"allow_duplicates"`
 }
 
 type ProposalView struct {
-	ProposalID string         `json:"proposal_id" jsonschema:"pass this to commit_proposal"`
-	Kind       string         `json:"kind" jsonschema:"meal_plan_entry or grocery_items"`
-	ExpiresAt  string         `json:"expires_at" jsonschema:"RFC 3339 UTC time after which the proposal can no longer be committed"`
-	Summary    string         `json:"summary" jsonschema:"plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval"`
-	Meal       *MealEntry     `json:"meal,omitempty" jsonschema:"the meal-plan entry that would be created"`
-	List       *NamedRef      `json:"list,omitempty" jsonschema:"the grocery list that would receive the items"`
-	Items      []ProposedItem `json:"items,omitempty" jsonschema:"the grocery items that would be created"`
-	Skipped    []SkippedItem  `json:"skipped,omitempty" jsonschema:"requested items that will NOT be written, with the reason"`
+	ProposalID string          `json:"proposal_id" jsonschema:"pass this to commit_proposal"`
+	Kind       string          `json:"kind" jsonschema:"meal_plan_entry, grocery_items, pantry_items or recipe_edit"`
+	ExpiresAt  string          `json:"expires_at" jsonschema:"RFC 3339 UTC time after which the proposal can no longer be committed"`
+	Summary    string          `json:"summary" jsonschema:"plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval"`
+	Meal       *MealEntry      `json:"meal,omitempty" jsonschema:"the meal-plan entry that would be created"`
+	List       *NamedRef       `json:"list,omitempty" jsonschema:"the grocery list that would receive the items"`
+	Items      []ProposedItem  `json:"items,omitempty" jsonschema:"the grocery items that would be created"`
+	Pantry     []PantryEntry   `json:"pantry_items,omitempty" jsonschema:"the pantry items that would be created"`
+	Recipe     *RecipeEditView `json:"recipe_edit,omitempty" jsonschema:"the recipe that would be changed, with the old and new value of every field"`
+	Skipped    []SkippedItem   `json:"skipped,omitempty" jsonschema:"requested items that will NOT be written, with the reason"`
 }
 
 type ProposedItem struct {
