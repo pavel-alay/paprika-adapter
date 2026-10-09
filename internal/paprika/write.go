@@ -58,6 +58,47 @@ type NewPantryItem struct {
 	PurchaseDate   string  `json:"purchase_date"`   // "YYYY-MM-DD 00:00:00"
 }
 
+// MealEdit names what to overwrite on an existing meal-plan entry. Nil leaves a field as it is.
+type MealEdit struct {
+	Date    *string      `json:"date,omitempty"`    // "YYYY-MM-DD 00:00:00"
+	Type    *MealSlot    `json:"type,omitempty"`    // which meal of the day
+	Subject *MealSubject `json:"subject,omitempty"` // what is planned
+}
+
+// MealSlot is a meal type the way a meal row refers to it.
+type MealSlot struct {
+	UID  string `json:"uid"`
+	Type int    `json:"type"` // the built-in number of the type, 0 for a custom one
+}
+
+// MealSubject is what a meal-plan entry plans: a recipe, or free text when RecipeUID is nil.
+type MealSubject struct {
+	RecipeUID *string `json:"recipe_uid"`
+	Name      string  `json:"name"`
+}
+
+// EditMeal overwrites an existing meal-plan entry with current plus edit.
+// Paprika replaces the whole row on write, so current must be the complete row
+// as just read from Paprika; every other field in it is sent back unchanged.
+func (c *Client) EditMeal(ctx context.Context, current Raw, edit MealEdit) error {
+	const op = "edit meal"
+	var obj map[string]any
+	if err := json.Unmarshal(current.JSON, &obj); err != nil || current.UID == "" || obj["uid"] != current.UID {
+		return &Error{Kind: KindInvalid, Op: op, Message: "current meal is not a complete Paprika meal row"}
+	}
+	if edit.Date != nil {
+		obj["date"] = *edit.Date
+	}
+	if edit.Type != nil {
+		obj["type_uid"], obj["type"] = edit.Type.UID, edit.Type.Type
+	}
+	if edit.Subject != nil {
+		obj["recipe_uid"], obj["name"] = edit.Subject.RecipeUID, edit.Subject.Name
+	}
+	obj["deleted"] = false
+	return c.upsert(ctx, Meals, []map[string]any{obj})
+}
+
 type mealWire struct {
 	NewMeal
 	Deleted bool `json:"deleted"`

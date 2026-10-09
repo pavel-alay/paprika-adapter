@@ -51,7 +51,7 @@ func New(d Deps) *mcp.Server {
 		Instructions: "Read-only view of one household's Paprika 3 account (recipes, pantry, meal plan, grocery lists) " +
 			"served from a local cache. Every result carries a sync block: treat state=stale as possibly outdated and say so. " +
 			"Writes, when enabled, are two-step: propose, show the summary to the user, and call commit_proposal only after they approve. " +
-			"Writes add rows, except propose_recipe_edit, which overwrites fields of an existing recipe. " +
+			"Writes add rows, except propose_recipe_edit and propose_meal_plan_edit, which overwrite an existing recipe or meal-plan entry. " +
 			"If the client supports MCP elicitation the user is also asked directly before anything is written.",
 	})
 
@@ -77,6 +77,9 @@ func New(d Deps) *mcp.Server {
 		add(srv, writeTool("propose_meal_plan_entry", "Propose meal plan entry",
 			"Prepare ONE meal-plan entry for a date. Writes nothing. Returns a proposal_id and a summary to show the user; "+
 				"the entry is created only by commit_proposal.", false, false), s.proposeMeal)
+		add(srv, writeTool("propose_meal_plan_edit", "Propose meal plan edit",
+			"Prepare a change to ONE existing meal-plan entry: move it to another day, change its meal type, or plan a different "+
+				"recipe or text in its place. Writes nothing. Returns a proposal_id, a summary, and the entry before and after.", false, false), s.proposeMealEdit)
 		add(srv, writeTool("propose_grocery_items", "Propose grocery items",
 			"Prepare items to add to one grocery list. Writes nothing. Items already on the list (unpurchased, same name) are skipped "+
 				"unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false, false), s.proposeGroceries)
@@ -90,7 +93,7 @@ func New(d Deps) *mcp.Server {
 		add(srv, writeTool("commit_proposal", "Commit proposal",
 			"Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports "+
 				"MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates. "+
-				"Committing a recipe edit overwrites the edited fields of that recipe.", true, true), s.commitProposal)
+				"Committing an edit overwrites the edited fields of that recipe or meal-plan entry.", true, true), s.commitProposal)
 	}
 	return srv
 }

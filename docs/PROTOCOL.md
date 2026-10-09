@@ -10,11 +10,13 @@ Paprika 1/2 formats and `.paprikarecipes` files are not supported.
 
 **Reads: verified on 2026-10-09**, first from the cache a full sync
 produced, then with the live integration test (`TestLiveReads`, passed). The Paprika app version
-was not recorded; add it here. **Writes: all three verified on the same day** with the live integration tests.
+was not recorded; add it here. **Writes: the three create-only writes and the meal-plan edit verified on the same day** with the live
+integration tests. The recipe edit is not verified yet.
 
 | Write | Result on 2026-10-09 |
 |---|---|
 | Meal-plan entry (`TestLiveMealWrite`) | passed: one meal by name on 2027-12-31 was accepted, returned by `GET /sync/meals/` with the same name, date and meal type, and gone from it after the soft delete |
+| Meal-plan edit (`TestLiveMealEdit`) | passed: an entry the test created itself was moved a day, given another meal type and other text by posting its whole row again under the same uid; Paprika returned the changed row, still one row, with `scale`, `is_ingredient` and `order_flag` as before |
 | Meal-plan entry pointing at a recipe (`recipe_uid`) | not run; needs `PAPRIKA_IT_RECIPE_UID` |
 | Grocery items (`TestLiveGroceryWrite`) | passed against the list `adapter-test`: one item was accepted, returned by `GET /sync/groceries/` with the same name and list, unpurchased; posting the same uid again left exactly one row; gone after the soft delete |
 | Pantry items (`TestLivePantryWrite`) | passed: one item with a quantity and an expiration date was accepted and returned by `GET /sync/pantry/` with the same values, in stock; posting the same uid again left exactly one row; gone after the soft delete. The returned row has the 11 expected fields, which also settles the pantry field set below |
@@ -85,6 +87,7 @@ Fixture tests in this repo prove the adapter matches the shapes below. They prov
 | 14 | Gallery photo link | `GET /sync/photo/{uid}/` → `{"result":{"photo_url"}}` | docs of `mcp-paprika` | **A** 2026-10-09 |
 | 15 | Photo download | `GET` of a `photo_url`: a signed link to `s3.amazonaws.com/uploads.paprikaapp.com/…`, no API token | docs of `mcp-paprika` | **A** 2026-10-09: JPEG, thumbnail about 35 kB, gallery photo about 240 kB |
 | 16 | Overwrite a recipe | `POST /sync/recipe/{uid}/`, multipart part `data` = gzip of **one** JSON object (not an array): the whole recipe, without `photo_url` and `on_grocery_list`, with `deleted` and a recomputed `hash` → `{"result":true}` | C | **not verified** |
+| 17 | Edit a meal-plan entry | `POST /sync/meals/` with the whole existing row under its uid, changed fields overwritten | C (whole-object upsert) | **A** 2026-10-09 |
 
 Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The adapter uses `www`.
 
@@ -114,7 +117,7 @@ Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The ada
 | Grocery ingredient catalog | post a companion `groceryingredients` row | does not | keeps v1 to a single write per commit |
 | Aisle for a new pantry item | send the aisle name and uid | the aisle Paprika remembers for that ingredient, otherwise `aisle: ""`, `aisle_uid: ""` | the captures show stored pantry rows with an empty `aisle_uid`; accepted on a real account (A 2026-10-09) |
 | Pantry `notes`, `location_uid` | macOS omits them on write | omits them | matches the capture (C); Paprika returns them as `null` (A) |
-| Meal `is_ingredient`, `scale` | macOS omits them on write | omits them | matches the capture (C) |
+| Meal `is_ingredient`, `scale` | macOS omits them on write | omits them when creating; sends them back as read when editing, so that the whole-row replace cannot drop a scale | create matches the capture (C); the edit with both fields present was accepted (A 2026-10-09) |
 | `notify` ping after a write | used for recipe deletes only | never | not used by the apps for these collections |
 | Login | form body; `paprika-tools` also describes Basic auth | form body only | matches the implementation built from captures. If login fails with correct credentials, this is the first thing to revisit |
 

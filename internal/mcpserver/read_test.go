@@ -38,13 +38,14 @@ func TestReadOnlyServerExposesNoWriteTools(t *testing.T) {
 
 func TestWriteServerAddsOnlyProposeAndCommit(t *testing.T) {
 	names := toolNames(t, newHarness(t, true))
-	if len(names) != 13 {
-		t.Fatalf("tools = %v, want 13", names)
+	if len(names) != 14 {
+		t.Fatalf("tools = %v, want 14", names)
 	}
-	// The one tool that changes existing data is the recipe edit the household asked for:
-	// rating, notes, description and directions. Nothing deletes, and nothing else edits.
+	// Two tools change existing data, both asked for by the household: the recipe edit
+	// (rating, notes, description, directions) and the meal-plan edit (day, meal type,
+	// what is planned). Nothing deletes, and nothing else edits.
 	for _, n := range names {
-		if n == "propose_recipe_edit" {
+		if n == "propose_recipe_edit" || n == "propose_meal_plan_edit" {
 			continue
 		}
 		for _, banned := range []string{"delete", "remove", "update", "edit", "clear", "bulk"} {

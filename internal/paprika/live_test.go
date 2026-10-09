@@ -431,6 +431,102 @@ func TestLiveMealWrite(t *testing.T) {
 	}
 }
 
+// TestLiveMealEdit creates its own meal-plan entry, edits day, meal type and
+// text, checks what Paprika then returns, and soft-deletes the entry.
+func TestLiveMealEdit(t *testing.T) {
+	c := liveClient(t)
+	date := os.Getenv("PAPRIKA_IT_MEAL_DATE")
+	if date == "" {
+		t.Skip("PAPRIKA_IT_MEAL_DATE is not set")
+	}
+	day, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		t.Fatalf("PAPRIKA_IT_MEAL_DATE: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	types, err := c.List(ctx, MealTypes)
+	if err != nil || len(types) < 2 {
+		t.Fatalf("meal types: %d rows, err %v; the test needs two", len(types), err)
+	}
+	first, _ := Decode[MealType](types[0].JSON)
+	second, _ := Decode[MealType](types[1].JSON)
+	meal := NewMeal{UID: NewUID(), Name: "[adapter-it] " + time.Now().UTC().Format(time.RFC3339), Date: date + " 00:00:00", TypeUID: first.UID}
+	if first.OriginalType != nil {
+		meal.Type = *first.OriginalType
+	}
+	if err := c.AddMeal(ctx, meal); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := c.upsert(ctx, Meals, []mealWire{{NewMeal: meal, Deleted: true}}); err != nil {
+			t.Errorf("CLEANUP FAILED, delete %q around %s by hand: %v", meal.Name, date, err)
+			return
+		}
+		if _, found := liveFind(t, c, Meals, meal.UID); found {
+			t.Errorf("soft-deleted meal %q is still returned; delete it by hand", meal.Name)
+		}
+	})
+	created, found := liveFind(t, c, Meals, meal.UID)
+	if !found {
+		t.Fatal("the new meal is not returned")
+	}
+
+	moved, renamed := day.AddDate(0, 0, -1).Format("2006-01-02")+" 00:00:00", meal.Name+" edited"
+	slot := &MealSlot{UID: second.UID}
+	if second.OriginalType != nil {
+		slot.Type = *second.OriginalType
+	}
+	if err := c.EditMeal(ctx, created, MealEdit{Date: &moved, Type: slot, Subject: &MealSubject{Name: renamed}}); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	edited, found := liveFind(t, c, Meals, meal.UID)
+	if !found {
+		t.Fatal("the edited meal is not returned")
+	}
+	got, err := Decode[Meal](edited.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Date != moved || got.Name != renamed || got.TypeUID == nil || *got.TypeUID != second.UID || got.Type != slot.Type || got.RecipeUID != nil {
+		t.Fatalf("read back %s", edited.JSON)
+	}
+	var before, after map[string]json.RawMessage
+	_ = json.Unmarshal(created.JSON, &before)
+	_ = json.Unmarshal(edited.JSON, &after)
+	for field, old := range before {
+		switch field {
+		case "date", "name", "type", "type_uid", "recipe_uid":
+			continue
+		}
+		if string(after[field]) != string(old) {
+			t.Errorf("%s changed from %s to %s", field, old, after[field])
+		}
+	}
+	if len(after) != len(before) {
+		t.Errorf("the row had %d fields and now has %d", len(before), len(after))
+	}
+	// The edit must have changed the row, not added a second one.
+	rows, err := c.List(ctx, Meals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, r := range rows {
+		if m, _ := Decode[Meal](r.JSON); strings.HasPrefix(m.Name, meal.Name) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d rows carry the test name, want 1", n)
+	}
+	meal.Name, meal.Date, meal.TypeUID, meal.Type = renamed, moved, second.UID, slot.Type // what the cleanup deletes
+	t.Logf("edited row: %s", edited.JSON)
+}
+
 func liveFind(t *testing.T, c *Client, col Collection, uid string) (Raw, bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

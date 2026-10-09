@@ -85,13 +85,14 @@ text minus blank lines.
 
 ## Write tools (only with `PAPRIKA_ENABLE_WRITES=true`)
 
-There are exactly five: four that prepare a write and one that performs it. Three of the writes only create
-new rows. One, `propose_recipe_edit`, changes existing data: four fields of a recipe. No delete, move, clear
-or bulk tool exists.
+There are exactly six: five that prepare a write and one that performs it. Three of the writes only create
+new rows. Two change existing data: `propose_recipe_edit` (four fields of a recipe) and
+`propose_meal_plan_edit` (one meal-plan entry). No delete, clear or bulk tool exists.
 
 | Tool | Arguments | Effect |
 |---|---|---|
 | `propose_meal_plan_entry` | `date`, `meal_type_uid` (from `get_meal_plan.meal_types`), and exactly one of `recipe_uid` or `name`; `allow_duplicate?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `expires_at`, `meal`) |
+| `propose_meal_plan_edit` | `meal_uid` (from `get_meal_plan`), and at least one of `date`, `meal_type_uid`, `recipe_uid` or `name`; `allow_duplicate?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `meal_before`, `meal`) |
 | `propose_grocery_items` | `list_uid` (no default list), `items[]` 1-25 of `{name, quantity?, instruction?}`; `allow_duplicates?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `items[]`, `skipped[]`) |
 | `propose_pantry_items` | `items[]` 1-25 of `{ingredient, quantity?, expiration_date?}`; `allow_duplicates?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `pantry_items[]`, `skipped[]`). Items are created in stock with today's date (in `PAPRIKA_TZ`) as purchase date |
 | `propose_recipe_edit` | `uid`, and at least one of `rating` (0-5, 0 = unrated), `notes`, `append_note`, `description`, `directions` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `recipe_edit.changes[]` with `field`, `from`, `to`) |
@@ -131,6 +132,21 @@ or bulk tool exists.
 - Recipes in the trash cannot be edited. Proposing values the recipe already has answers `duplicate`.
 - Name, ingredients, times, servings, categories, photos and everything else cannot be changed.
 
+### Editing a meal-plan entry
+
+`propose_meal_plan_edit` changes one existing entry, found by its `meal_uid`:
+
+- `date` moves it to another day, `meal_type_uid` changes which meal of the day it is, `recipe_uid` or `name`
+  replaces what is planned (a recipe, or free text). Any combination in one edit.
+- The proposal shows the entry before (`meal_before`) and after (`meal`); the commit result repeats both, so
+  an edit is undone by proposing the reverse.
+- At commit the meal plan is read from Paprika, the edited fields are overwritten on that entry's row, and
+  the row is written back and read back. Scale and anything else on the row is carried over. An edit made in
+  an app to the same fields in the meantime is overwritten.
+- If the entry was removed in an app before the commit, nothing is written (`not_found`).
+- An edit that would repeat something already planned for that day and meal type is refused as `duplicate`
+  unless `allow_duplicate` is set. Entries cannot be removed, and only one entry changes per proposal.
+
 ### Retrying
 
 `commit_proposal` is safe to repeat in every state:
@@ -141,6 +157,7 @@ or bulk tool exists.
 | POST failed before reaching Paprika | sends the same uids again |
 | POST reached Paprika but the response was lost | finds the uids on re-read, sends nothing, verifies, reports `committed` |
 | Same request proposed twice | the second commit finds the items and fails with `duplicate` |
+| Meal-plan edit whose response was lost | finds the entry already changed, writes nothing, verifies |
 | Recipe edit whose response was lost | finds the fields already changed, writes nothing, verifies; a note is not appended twice |
 
 ### Example

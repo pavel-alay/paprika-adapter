@@ -17,6 +17,7 @@ const (
 	kindGroceries = "grocery_items"
 	kindPantry    = "pantry_items"
 	kindRecipe    = "recipe_edit"
+	kindMealEdit  = "meal_plan_edit"
 
 	maxGroceryItems = 25
 	maxTextLen      = 200
@@ -31,16 +32,18 @@ type payload struct {
 	Items           []paprika.NewGroceryItem `json:"items,omitempty"`
 	Pantry          []paprika.NewPantryItem  `json:"pantry,omitempty"`
 	Recipe          *recipeEdit              `json:"recipe,omitempty"`
+	MealEdit        *mealEdit                `json:"meal_edit,omitempty"`
 	Skipped         []SkippedItem            `json:"skipped,omitempty"`
 	AllowDuplicates bool                     `json:"allow_duplicates"`
 }
 
 type ProposalView struct {
 	ProposalID string          `json:"proposal_id" jsonschema:"pass this to commit_proposal"`
-	Kind       string          `json:"kind" jsonschema:"meal_plan_entry, grocery_items, pantry_items or recipe_edit"`
+	Kind       string          `json:"kind" jsonschema:"meal_plan_entry, meal_plan_edit, grocery_items, pantry_items or recipe_edit"`
 	ExpiresAt  string          `json:"expires_at" jsonschema:"RFC 3339 UTC time after which the proposal can no longer be committed"`
 	Summary    string          `json:"summary" jsonschema:"plain-language statement of exactly what commit_proposal will write; show it to the user and wait for approval"`
-	Meal       *MealEntry      `json:"meal,omitempty" jsonschema:"the meal-plan entry that would be created"`
+	Meal       *MealEntry      `json:"meal,omitempty" jsonschema:"the meal-plan entry that would be created, or how an edited entry would look afterwards"`
+	MealBefore *MealEntry      `json:"meal_before,omitempty" jsonschema:"for an edit: the entry as it is now"`
 	List       *NamedRef       `json:"list,omitempty" jsonschema:"the grocery list that would receive the items"`
 	Items      []ProposedItem  `json:"items,omitempty" jsonschema:"the grocery items that would be created"`
 	Pantry     []PantryEntry   `json:"pantry_items,omitempty" jsonschema:"the pantry items that would be created"`
@@ -76,14 +79,9 @@ type ProposeMealIn struct {
 }
 
 func (s *server) proposeMeal(ctx context.Context, in ProposeMealIn, out *ProposeOut) *ToolError {
-	day, err := time.Parse(dayLayout, strings.TrimSpace(in.Date))
-	if err != nil {
-		return invalid("date is required and must look like 2026-10-09")
-	}
-	now := s.Now().In(s.Location)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	if d := day.Sub(today); d > maxPlanDistance || d < -maxPlanDistance {
-		return invalid("date is more than a year away from today (" + today.Format(dayLayout) + "); check the year")
+	day, terr := s.planDay(in.Date)
+	if terr != nil {
+		return terr
 	}
 	recipeUID, name := strings.TrimSpace(in.RecipeUID), strings.TrimSpace(in.Name)
 	if (recipeUID == "") == (name == "") {
@@ -111,24 +109,11 @@ func (s *server) proposeMeal(ctx context.Context, in ProposeMealIn, out *Propose
 		meal.Type = *mealType.OriginalType
 	}
 	if recipeUID != "" {
-		if terr := s.ensure(ctx, &Meta{}, paprika.Recipes); terr != nil {
+		recipeName, terr := s.plannable(ctx, recipeUID)
+		if terr != nil {
 			return terr
 		}
-		cached, ok, err := s.Store.Recipe(ctx, recipeUID)
-		if err != nil {
-			return fromErr(err)
-		}
-		if !ok {
-			return notFound("no recipe with uid " + recipeUID)
-		}
-		recipe, err := paprika.Decode[paprika.Recipe](cached.Raw)
-		if err != nil {
-			return fromErr(err)
-		}
-		if recipe.InTrash {
-			return invalid("recipe " + recipe.Name + " is in Paprika's trash")
-		}
-		meal.RecipeUID, meal.Name = &recipeUID, recipe.Name
+		meal.RecipeUID, meal.Name = &recipeUID, recipeName
 	}
 	existing, err := store.Load[paprika.Meal](ctx, s.Store, paprika.Meals)
 	if err != nil {
@@ -254,6 +239,42 @@ func (s *server) proposeGroceries(ctx context.Context, in ProposeGroceriesIn, ou
 	view.List, view.Items, view.Skipped = list, shown, p.Skipped
 	out.Proposal = view
 	return nil
+}
+
+// planDay parses a day of the meal plan and refuses one implausibly far from today.
+func (s *server) planDay(date string) (time.Time, *ToolError) {
+	day, err := time.Parse(dayLayout, strings.TrimSpace(date))
+	if err != nil {
+		return day, invalid("date must look like 2026-10-09")
+	}
+	now := s.Now().In(s.Location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if d := day.Sub(today); d > maxPlanDistance || d < -maxPlanDistance {
+		return day, invalid("date is more than a year away from today (" + today.Format(dayLayout) + "); check the year")
+	}
+	return day, nil
+}
+
+// plannable returns the name of a recipe that may be put on the meal plan.
+func (s *server) plannable(ctx context.Context, recipeUID string) (string, *ToolError) {
+	if terr := s.ensure(ctx, &Meta{}, paprika.Recipes); terr != nil {
+		return "", terr
+	}
+	cached, ok, err := s.Store.Recipe(ctx, recipeUID)
+	if err != nil {
+		return "", fromErr(err)
+	}
+	if !ok {
+		return "", notFound("no recipe with uid " + recipeUID)
+	}
+	recipe, err := paprika.Decode[paprika.Recipe](cached.Raw)
+	if err != nil {
+		return "", fromErr(err)
+	}
+	if recipe.InTrash {
+		return "", invalid("recipe " + recipe.Name + " is in Paprika's trash")
+	}
+	return recipe.Name, nil
 }
 
 func (s *server) saveProposal(ctx context.Context, kind string, p payload) (*ProposalView, *ToolError) {

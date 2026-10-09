@@ -141,6 +141,7 @@ type reply struct {
 
 	Photo      *mcpserver.RecipePhoto
 	RecipeEdit *mcpserver.RecipeEditView `json:"recipe_edit"`
+	MealBefore *mcpserver.MealEntry      `json:"meal_before"`
 	Proposal   *mcpserver.ProposalView
 	Status     string
 	Verified   bool
