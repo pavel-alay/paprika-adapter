@@ -11,7 +11,7 @@ Paprika 1/2 formats and `.paprikarecipes` files are not supported.
 **Reads: verified on 2026-10-09**, first from the cache a full sync
 produced, then with the live integration test (`TestLiveReads`, passed). The Paprika app version
 was not recorded; add it here. **Writes: the three create-only writes and the meal-plan edit verified on the same day** with the live
-integration tests. The recipe edit is not verified yet.
+integration tests, **the pantry edit and removal on 2026-10-10**. The recipe edit is not verified yet.
 
 | Write | Result on 2026-10-09 |
 |---|---|
@@ -20,6 +20,7 @@ integration tests. The recipe edit is not verified yet.
 | Meal-plan entry pointing at a recipe (`recipe_uid`) | not run; needs `PAPRIKA_IT_RECIPE_UID` |
 | Grocery items (`TestLiveGroceryWrite`) | passed against the list `adapter-test`: one item was accepted, returned by `GET /sync/groceries/` with the same name and list, unpurchased; posting the same uid again left exactly one row; gone after the soft delete |
 | Pantry items (`TestLivePantryWrite`) | passed: one item with a quantity and an expiration date was accepted and returned by `GET /sync/pantry/` with the same values, in stock; posting the same uid again left exactly one row; gone after the soft delete. The returned row has the 11 expected fields, which also settles the pantry field set below |
+| Pantry edit and removal (`TestLivePantryEdit`, 2026-10-10) | passed: an item the test created itself was renamed, given another quantity, marked out of stock and given an expiration and a purchase date by posting its whole row again under the same uid; Paprika returned the changed row with every other field as before. Posting it with `has_expiration: false`, `expiration_date: null` removed the expiration date. Posting the whole row with `deleted: true` made `GET /sync/pantry/` stop returning it |
 | Aisle of a new grocery item | sent `aisle: ""`, `aisle_uid: null`; Paprika stored and returned exactly that, it does not assign an aisle itself. Where the apps display such an item has not been looked at |
 
 | Collection | Rows | Result |
@@ -88,14 +89,16 @@ Fixture tests in this repo prove the adapter matches the shapes below. They prov
 | 15 | Photo download | `GET` of a `photo_url`: a signed link to `s3.amazonaws.com/uploads.paprikaapp.com/…`, no API token | docs of `mcp-paprika` | **A** 2026-10-09: JPEG, thumbnail about 35 kB, gallery photo about 240 kB |
 | 16 | Overwrite a recipe | `POST /sync/recipe/{uid}/`, multipart part `data` = gzip of **one** JSON object (not an array): the whole recipe, without `photo_url` and `on_grocery_list`, with `deleted` and a recomputed `hash` → `{"result":true}` | C | **not verified** |
 | 17 | Edit a meal-plan entry | `POST /sync/meals/` with the whole existing row under its uid, changed fields overwritten | C (whole-object upsert) | **A** 2026-10-09 |
+| 18 | Edit a pantry item | `POST /sync/pantry/` with the whole existing row under its uid, changed fields overwritten | C (whole-object upsert) | **A** 2026-10-10 |
+| 19 | Remove pantry items | `POST /sync/pantry/` with each whole existing row and `deleted: true` | C (soft delete) | **A** 2026-10-10 |
 
 Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The adapter uses `www`.
 
 ## Facts the design depends on
 
-- **Writes are upserts by uid and replace the whole object** (C; A 2026-10-09 for "same uid twice gives one row"). There is no create-vs-update. The adapter
-  therefore only ever posts uids it minted itself, checks first that Paprika does not already hold them, and
-  never posts a row it read from the cache.
+- **Writes are upserts by uid and replace the whole object** (C; A 2026-10-09 for "same uid twice gives one row"). There is no create-vs-update. When creating, the adapter
+  therefore only posts uids it minted itself and checks first that Paprika does not already hold them. When
+  editing or removing, it posts the row it read from Paprika a moment before, never one from the cache.
 - **New uids must be canonical uppercase UUIDs** (C). Server-minted uids come in other shapes (64 hex chars,
   `uuid-number-hex`); the adapter treats every uid as an opaque string and only validates the ones it mints.
 - **Errors often arrive as HTTP 200** (L, C). A 200 is success only if the body has `result`.
@@ -103,8 +106,8 @@ Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The ada
   empty grocery list). The adapter skips a download when a counter has not moved. Because this is inferred,
   every collection is re-downloaded at least every 6 hours regardless.
 - **Recipe `hash` changes when a recipe changes** (C, T). The adapter re-fetches a recipe only when its hash differs.
-- **Soft-deleted rows are not returned by `GET`** (A for meals, grocery items and pantry items, 2026-10-09). Only the
-  integration test's cleanup depends on it.
+- **Soft-deleted rows are not returned by `GET`** (A for meals, grocery items and pantry items, 2026-10-09). The
+  removal of pantry items and the integration test's cleanup depend on it.
 - **Token lifetime is unknown** (T). On a 401 the adapter logs in again once and retries.
 - **Rate limits are unknown** (T). The adapter makes one `status` request per refresh, fetches recipes four at a
   time, backs off after failures, and after Paprika rejects a login waits five minutes before trying another.

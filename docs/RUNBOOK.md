@@ -4,8 +4,8 @@ First step for any problem: ask the agent for `sync_status` (add `refresh: true`
 or run `make sync`. Each collection reports `state`, `error.code` and `protocol_drift`.
 
 The adapter only reads from Paprika, except for the three create-only writes (meal-plan entry, grocery
-items, pantry items) and the two edits: a recipe's rating, notes, description and directions, and one
-meal-plan entry at a time (day, meal type, what is planned). The cache is disposable:
+items, pantry items), the three edits (a recipe's rating, notes, description and directions; one
+meal-plan entry at a time; one pantry item at a time) and the removal of pantry items. The cache is disposable:
 deleting the `paprika-data` volume loses nothing that is not in Paprika.
 
 Restarting the adapter is `make restart`. It is needed after every change to `paprika.env`. Clients lose
@@ -66,7 +66,12 @@ it cannot overwrite an edit made in an app. What can still happen:
 | Recipe edited in the app, the client shows the old text | recipe hash not re-checked yet | wait `PAPRIKA_MAX_AGE` or refresh; the cached copy is replaced, never merged |
 | Recipes stuck `stale` with "N of M changed recipes could not be fetched" | some recipe fetches failed | it resumes on the next sync; persistent failure on the same recipes points at a protocol change |
 
-To undo a write, delete the item or meal in the Paprika app. There is no delete tool on purpose.
+To undo a write, delete the item or meal in the Paprika app. Only pantry items can be removed through the
+adapter (`propose_pantry_removal`).
+
+To undo a pantry edit, propose the reverse: the commit result gives the item as it was in `pantry_before`.
+To undo a pantry removal, add the item again with `propose_pantry_items`, using `pantry_removed` from the
+commit result.
 
 To undo a meal-plan edit, propose the reverse: the commit result gives the entry as it was in `meal_before`.
 
@@ -108,7 +113,8 @@ rather than failing. Treat any `missing_fields` as a reason to do steps 1 and 2.
 
 Opt-in test against the real account. It creates one grocery item, one meal and one pantry item, reads each
 back, then soft-deletes exactly those rows the way the Paprika apps do, and checks they are gone. With a meal
-date set it also creates a second entry of its own, edits it, and removes it.
+date set it also creates a second entry of its own, edits it, and removes it; the pantry test does the same
+with a second pantry item of its own.
 
 1. In the Paprika app create a grocery list whose name contains `test` (for example `adapter-test`), and
    a throwaway recipe whose name contains `test` (it enables the recipe edit test, which changes its rating

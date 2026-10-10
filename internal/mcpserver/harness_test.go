@@ -125,16 +125,19 @@ type reply struct {
 		HasPhoto      bool `json:"has_photo"`
 		GalleryPhotos int  `json:"gallery_photos"`
 	} `json:"recipe"`
-	Total     int
-	Items     []item
-	Pantry    []item `json:"pantry_items"`
-	Lists     []mcpserver.GroceryListEntry
-	List      *mcpserver.NamedRef
-	From, To  string
-	Today     string
-	Meals     []mcpserver.MealEntry
-	MealTypes []mcpserver.NamedRef `json:"meal_types"`
-	Meal      *mcpserver.MealEntry
+	Total  int
+	Items  []item
+	Pantry []item `json:"pantry_items"`
+
+	PantryBefore  []mcpserver.PantryEntry `json:"pantry_before"`
+	PantryRemoved []mcpserver.PantryEntry `json:"pantry_removed"`
+	Lists         []mcpserver.GroceryListEntry
+	List          *mcpserver.NamedRef
+	From, To      string
+	Today         string
+	Meals         []mcpserver.MealEntry
+	MealTypes     []mcpserver.NamedRef `json:"meal_types"`
+	Meal          *mcpserver.MealEntry
 
 	Healthy       bool
 	WritesEnabled bool `json:"writes_enabled"`

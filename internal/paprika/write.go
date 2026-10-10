@@ -81,10 +81,9 @@ type MealSubject struct {
 // Paprika replaces the whole row on write, so current must be the complete row
 // as just read from Paprika; every other field in it is sent back unchanged.
 func (c *Client) EditMeal(ctx context.Context, current Raw, edit MealEdit) error {
-	const op = "edit meal"
-	var obj map[string]any
-	if err := json.Unmarshal(current.JSON, &obj); err != nil || current.UID == "" || obj["uid"] != current.UID {
-		return &Error{Kind: KindInvalid, Op: op, Message: "current meal is not a complete Paprika meal row"}
+	obj, err := completeRow("edit meal", current)
+	if err != nil {
+		return err
 	}
 	if edit.Date != nil {
 		obj["date"] = *edit.Date
@@ -97,6 +96,72 @@ func (c *Client) EditMeal(ctx context.Context, current Raw, edit MealEdit) error
 	}
 	obj["deleted"] = false
 	return c.upsert(ctx, Meals, []map[string]any{obj})
+}
+
+// PantryEdit names what to overwrite on an existing pantry item. Nil leaves a field as it is.
+type PantryEdit struct {
+	Ingredient   *string `json:"ingredient,omitempty"`
+	Quantity     *string `json:"quantity,omitempty"`
+	InStock      *bool   `json:"in_stock,omitempty"`
+	Expiration   *string `json:"expiration,omitempty"`    // "YYYY-MM-DD 00:00:00"; "" removes the expiration date
+	PurchaseDate *string `json:"purchase_date,omitempty"` // "YYYY-MM-DD 00:00:00"
+}
+
+// EditPantryItem overwrites an existing pantry item with current plus edit.
+// As with EditMeal, current must be the complete row as just read from Paprika.
+func (c *Client) EditPantryItem(ctx context.Context, current Raw, edit PantryEdit) error {
+	obj, err := completeRow("edit pantry item", current)
+	if err != nil {
+		return err
+	}
+	if edit.Ingredient != nil {
+		obj["ingredient"] = *edit.Ingredient
+	}
+	if edit.Quantity != nil {
+		obj["quantity"] = *edit.Quantity
+	}
+	if edit.InStock != nil {
+		obj["in_stock"] = *edit.InStock
+	}
+	if edit.Expiration != nil {
+		obj["has_expiration"], obj["expiration_date"] = false, nil
+		if *edit.Expiration != "" {
+			obj["has_expiration"], obj["expiration_date"] = true, *edit.Expiration
+		}
+	}
+	if edit.PurchaseDate != nil {
+		obj["purchase_date"] = *edit.PurchaseDate
+	}
+	obj["deleted"] = false
+	return c.upsert(ctx, Pantry, []map[string]any{obj})
+}
+
+// RemovePantryItems removes pantry items the way Paprika's own clients do: each
+// complete row is posted again, marked deleted. Paprika then stops returning it.
+func (c *Client) RemovePantryItems(ctx context.Context, current []Raw) error {
+	const op = "remove pantry items"
+	if len(current) == 0 {
+		return &Error{Kind: KindInvalid, Op: op, Message: "no items"}
+	}
+	rows := make([]map[string]any, 0, len(current))
+	for _, r := range current {
+		obj, err := completeRow(op, r)
+		if err != nil {
+			return err
+		}
+		obj["deleted"] = true
+		rows = append(rows, obj)
+	}
+	return c.upsert(ctx, Pantry, rows)
+}
+
+// completeRow decodes a row read from Paprika so that it can be posted back whole.
+func completeRow(op string, current Raw) (map[string]any, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(current.JSON, &obj); err != nil || current.UID == "" || obj["uid"] != current.UID {
+		return nil, &Error{Kind: KindInvalid, Op: op, Message: "current row is not a complete Paprika row"}
+	}
+	return obj, nil
 }
 
 type mealWire struct {

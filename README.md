@@ -14,8 +14,8 @@ Paprika stays the source of truth.
 | | |
 |---|---|
 | Read tools | `search_recipes`, `get_recipe`, `get_recipe_photo`, `list_pantry`, `get_meal_plan`, `list_grocery_lists`, `list_grocery_items`, `sync_status` |
-| Write tools (off by default) | `propose_meal_plan_entry`, `propose_meal_plan_edit`, `propose_grocery_items`, `propose_pantry_items`, `propose_recipe_edit`, `commit_proposal` |
-| Not available | delete, bulk operations, creating recipes, editing anything but a meal-plan entry or a recipe's rating, notes, description and directions, photo uploads, menus |
+| Write tools (off by default) | `propose_meal_plan_entry`, `propose_meal_plan_edit`, `propose_grocery_items`, `propose_pantry_items`, `propose_pantry_edit`, `propose_pantry_removal`, `propose_recipe_edit`, `commit_proposal` |
+| Not available | deleting anything but pantry items, creating recipes, editing anything but a meal-plan entry, a pantry item or a recipe's rating, notes, description and directions, photo uploads, menus |
 
 - Every result is compact typed JSON with Paprika's own uids and an explicit `sync` block
   (`fresh` / `stale` / `never_synced`, last sync time, last error, protocol drift).
@@ -26,9 +26,11 @@ Paprika stays the source of truth.
   small cover thumbnail by default, a full-resolution gallery photo on request.
 - The cache is never pushed back. Writes that add rows use freshly minted uids, check Paprika first, are
   verified by reading back, and are safe to retry.
-- Two writes change existing data: a recipe edit overwrites the rating, notes, description or directions of
-  a recipe, and a meal-plan edit moves an entry to another day or meal type or plans something else in its
-  place. Both work on a copy read from Paprika at that moment, so every other field is sent back as it was.
+- Three writes change existing data: a recipe edit overwrites the rating, notes, description or directions of
+  a recipe, a meal-plan edit moves an entry to another day or meal type or plans something else in its
+  place, and a pantry edit changes an item's quantity, stock status, dates or name. All work on a copy read
+  from Paprika at that moment, so every other field is sent back as it was.
+- One write removes data: pantry items, named one by one by uid.
 - A write needs `confirm: true` from the agent and, where the client supports MCP elicitation,
   an explicit approval from the user.
 - Recipe and list text is returned as data. It can come from anywhere (imported web recipes), so the agent

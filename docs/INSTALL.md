@@ -122,8 +122,9 @@ Only after step 3 is clean and the read tools have been used for a while:
 3. Set `PAPRIKA_ENABLE_WRITES=true` in `paprika.env`, and `PAPRIKA_APPROVAL=human` if nothing may be written
    without a person pressing approve in the client that asked. `make restart`, then reload the client.
 
-Six more tools appear: `propose_meal_plan_entry`, `propose_meal_plan_edit`, `propose_grocery_items`,
-`propose_pantry_items`, `propose_recipe_edit`, `commit_proposal`. Each write is
+Eight more tools appear: `propose_meal_plan_entry`, `propose_meal_plan_edit`, `propose_grocery_items`,
+`propose_pantry_items`, `propose_pantry_edit`, `propose_pantry_removal`, `propose_recipe_edit`,
+`commit_proposal`. Each write is
 logged with the name of the client that made it (`tool=commit_proposal client=anna outcome=ok`).
 
 ## Without Docker

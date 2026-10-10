@@ -11,7 +11,7 @@ package paprika
 //	PAPRIKA_IT_MEAL_DATE              YYYY-MM-DD, a day you do not plan on; enables the meal write test
 //	PAPRIKA_IT_RECIPE_UID             optional disposable recipe to plan in the meal write test; if its
 //	                                  name contains "test" it also enables the recipe edit test
-//	PAPRIKA_IT_PANTRY                 set to 1 to enable the pantry write test
+//	PAPRIKA_IT_PANTRY                 set to 1 to enable the pantry write, edit and removal tests
 //
 //	go test -tags integration -run Live -v ./internal/paprika/
 //
@@ -373,6 +373,89 @@ func TestLivePantryWrite(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("repeated write produced %d rows, want 1", n)
 	}
+}
+
+// TestLivePantryEdit creates its own pantry item, edits it, checks what Paprika
+// then returns, removes it the way the adapter removes items and checks it is gone.
+func TestLivePantryEdit(t *testing.T) {
+	c := liveClient(t)
+	if os.Getenv("PAPRIKA_IT_PANTRY") != "1" {
+		t.Skip("PAPRIKA_IT_PANTRY is not 1")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	item := NewPantryItem{UID: NewUID(), Ingredient: "[adapter-it] " + time.Now().UTC().Format(time.RFC3339), Quantity: "1 test",
+		InStock: true, PurchaseDate: "2026-01-01 00:00:00"}
+	if err := c.AddPantryItems(ctx, []NewPantryItem{item}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	removed := false
+	t.Cleanup(func() {
+		if removed {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := c.upsert(ctx, Pantry, []pantryWire{{NewPantryItem: item, Deleted: true}}); err != nil {
+			t.Errorf("CLEANUP FAILED, delete %q from the pantry by hand: %v", item.Ingredient, err)
+		}
+	})
+	created, found := liveFind(t, c, Pantry, item.UID)
+	if !found {
+		t.Fatal("the new item is not returned")
+	}
+
+	renamed, qty, out, expires, bought := item.Ingredient+" edited", "2 tests", false, "2099-12-31 00:00:00", "2026-02-02 00:00:00"
+	edit := PantryEdit{Ingredient: &renamed, Quantity: &qty, InStock: &out, Expiration: &expires, PurchaseDate: &bought}
+	if err := c.EditPantryItem(ctx, created, edit); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	edited, found := liveFind(t, c, Pantry, item.UID)
+	if !found {
+		t.Fatal("the edited item is not returned")
+	}
+	got, err := Decode[PantryItem](edited.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Ingredient != renamed || got.Quantity != qty || got.InStock || !got.HasExpiration || got.ExpirationDate == nil ||
+		*got.ExpirationDate != expires || got.PurchaseDate == nil || *got.PurchaseDate != bought {
+		t.Fatalf("read back %s", edited.JSON)
+	}
+	var before, after map[string]json.RawMessage
+	_ = json.Unmarshal(created.JSON, &before)
+	_ = json.Unmarshal(edited.JSON, &after)
+	for field, old := range before {
+		switch field {
+		case "ingredient", "quantity", "in_stock", "has_expiration", "expiration_date", "purchase_date":
+			continue
+		}
+		if string(after[field]) != string(old) {
+			t.Errorf("%s changed from %s to %s", field, old, after[field])
+		}
+	}
+	if len(after) != len(before) {
+		t.Errorf("the row had %d fields and now has %d", len(before), len(after))
+	}
+
+	// Removing the expiration date again.
+	none := ""
+	if err := c.EditPantryItem(ctx, edited, PantryEdit{Expiration: &none}); err != nil {
+		t.Fatalf("clear expiration: %v", err)
+	}
+	cleared, _ := liveFind(t, c, Pantry, item.UID)
+	if got, _ := Decode[PantryItem](cleared.JSON); got.HasExpiration || got.ExpirationDate != nil || got.Ingredient != renamed {
+		t.Fatalf("after clearing the expiration: %s", cleared.JSON)
+	}
+
+	if err := c.RemovePantryItems(ctx, []Raw{cleared}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, found := liveFind(t, c, Pantry, item.UID); found {
+		t.Fatalf("removed item %q is still returned; delete it by hand", renamed)
+	}
+	removed = true
 }
 
 func TestLiveMealWrite(t *testing.T) {

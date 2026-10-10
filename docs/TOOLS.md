@@ -85,9 +85,10 @@ text minus blank lines.
 
 ## Write tools (only with `PAPRIKA_ENABLE_WRITES=true`)
 
-There are exactly six: five that prepare a write and one that performs it. Three of the writes only create
-new rows. Two change existing data: `propose_recipe_edit` (four fields of a recipe) and
-`propose_meal_plan_edit` (one meal-plan entry). No delete, clear or bulk tool exists.
+There are exactly eight: seven that prepare a write and one that performs it. Three of the writes only create
+new rows. Three change existing data: `propose_recipe_edit` (four fields of a recipe),
+`propose_meal_plan_edit` (one meal-plan entry) and `propose_pantry_edit` (one pantry item). One removes data:
+`propose_pantry_removal`. Nothing else can be deleted or cleared.
 
 | Tool | Arguments | Effect |
 |---|---|---|
@@ -95,6 +96,8 @@ new rows. Two change existing data: `propose_recipe_edit` (four fields of a reci
 | `propose_meal_plan_edit` | `meal_uid` (from `get_meal_plan`), and at least one of `date`, `meal_type_uid`, `recipe_uid` or `name`; `allow_duplicate?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `meal_before`, `meal`) |
 | `propose_grocery_items` | `list_uid` (no default list), `items[]` 1-25 of `{name, quantity?, instruction?}`; `allow_duplicates?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `items[]`, `skipped[]`) |
 | `propose_pantry_items` | `items[]` 1-25 of `{ingredient, quantity?, expiration_date?}`; `allow_duplicates?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `pantry_items[]`, `skipped[]`). Items are created in stock with today's date (in `PAPRIKA_TZ`) as purchase date |
+| `propose_pantry_edit` | `item_uid` (from `list_pantry`), and at least one of `ingredient`, `quantity` (`""` clears), `in_stock`, `expiration_date`, `clear_expiration`, `purchase_date`; `allow_duplicate?` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `pantry_before[]`, `pantry_items[]`, one item each) |
+| `propose_pantry_removal` | `item_uids[]` 1-25 (from `list_pantry`) | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `pantry_removed[]`) |
 | `propose_recipe_edit` | `uid`, and at least one of `rating` (0-5, 0 = unrated), `notes`, `append_note`, `description`, `directions` | Writes nothing. Returns `proposal` (`proposal_id`, `summary`, `recipe_edit.changes[]` with `field`, `from`, `to`) |
 | `commit_proposal` | `proposal_id`, `confirm: true` | Writes the proposal, reads it back, returns `status`, `verified`, and the rows as read back |
 
@@ -103,7 +106,7 @@ new rows. Two change existing data: `propose_recipe_edit` (four fields of a reci
 1. **Propose.** Inputs are validated against data confirmed fresh just now (a stale cache refuses to propose).
    Uids are minted here and stored with the proposal in SQLite. Grocery items already on the list, unpurchased,
    under the same name are put in `skipped` instead of being proposed; so are pantry items whose ingredient
-   is already in the pantry, in stock or not (restocking an existing item is an edit, which v1 does not do).
+   is already in the pantry, in stock or not (restocking an existing item is `propose_pantry_edit` with `in_stock: true`).
 2. **Approve.** The agent shows `summary` to the user. If the client supports MCP elicitation,
    `commit_proposal` also puts the same summary to the user directly and writes only on *accept*.
    With `PAPRIKA_APPROVAL=human` a client that cannot prompt cannot write at all.
@@ -116,7 +119,7 @@ new rows. Two change existing data: `propose_recipe_edit` (four fields of a reci
 
 ### Editing a recipe
 
-`propose_recipe_edit` is the only tool that overwrites. What that means:
+`propose_recipe_edit` overwrites text of a recipe. What that means:
 
 - `notes`, `description` and `directions` **replace** the field. `append_note` instead adds a paragraph after
   the existing notes, and is the right choice for "add a note". An empty `notes` or `description` clears it;
@@ -146,6 +149,34 @@ new rows. Two change existing data: `propose_recipe_edit` (four fields of a reci
 - If the entry was removed in an app before the commit, nothing is written (`not_found`).
 - An edit that would repeat something already planned for that day and meal type is refused as `duplicate`
   unless `allow_duplicate` is set. Entries cannot be removed, and only one entry changes per proposal.
+
+### Editing and removing pantry items
+
+`propose_pantry_edit` changes one existing item, found by its `item_uid`:
+
+- `quantity` replaces the amount (an empty string clears it), `in_stock` marks the item used up or back in
+  stock, `expiration_date` sets and `clear_expiration` removes the expiration date, `purchase_date` sets the
+  purchase date, `ingredient` renames the item. Any combination in one edit.
+- "We are out of X" is `in_stock: false`, which keeps the item in the pantry. Removal is for items that
+  should not be listed at all.
+- The proposal shows the item before (`pantry_before`) and after (`pantry_items`); the commit result repeats
+  both, so an edit is undone by proposing the reverse.
+- At commit the pantry is read from Paprika, the edited fields are overwritten on that item's row, and the
+  row is written back and read back. Aisle, notes and anything else on the row is carried over; a renamed
+  item keeps its aisle. An edit made in an app to the same fields in the meantime is overwritten.
+- If the item was removed in an app before the commit, nothing is written (`not_found`).
+- Renaming to an ingredient another pantry item already has is refused as `duplicate` unless
+  `allow_duplicate` is set.
+
+`propose_pantry_removal` removes the items named in `item_uids`:
+
+- Items are named by uid only: there is no "remove everything matching" and no "clear the pantry". The
+  summary lists every item by name and quantity; that list is what the user approves.
+- At commit the pantry is read from Paprika and each item still there is posted back marked deleted, the way
+  the Paprika apps delete. Items already gone are left alone. The pantry is then read again and the result
+  is `verified` only if none of the items is returned.
+- The commit result lists the removed items as they were (`pantry_removed`). There is no restore tool: to
+  undo, add the item again with `propose_pantry_items`. It gets a new uid, and notes it had are lost.
 
 ### Retrying
 

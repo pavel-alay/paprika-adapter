@@ -70,7 +70,7 @@ func (s *server) proposePantry(ctx context.Context, in ProposePantryIn, out *Pro
 		if dup := duplicatePantry(existing, item); dup != nil && !in.AllowDuplicates {
 			reason := "already in the pantry"
 			if !dup.InStock {
-				reason += ", marked out of stock; mark it in stock in the Paprika app instead"
+				reason += ", marked out of stock; use propose_pantry_edit with in_stock=true instead"
 			}
 			p.Skipped = append(p.Skipped, SkippedItem{Name: name, Reason: reason, ExistingUID: dup.UID})
 			continue
