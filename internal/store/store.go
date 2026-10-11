@@ -13,7 +13,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 const schema = `

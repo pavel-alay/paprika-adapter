@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/paprikatest"
-	"paprika-adapter/internal/syncer"
+	"github.com/pavel-alay/paprika-adapter/internal/paprikatest"
+	"github.com/pavel-alay/paprika-adapter/internal/syncer"
 )
 
 func toolNames(t *testing.T, h *harness) []string {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/paprikatest"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprikatest"
 )
 
 // store answers like the photo bucket and records what the client asked it.

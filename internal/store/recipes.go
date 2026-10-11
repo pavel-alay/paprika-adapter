@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 // CachedRecipe is a recipe as Paprika returned it plus when it was fetched.

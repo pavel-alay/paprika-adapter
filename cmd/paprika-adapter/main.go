@@ -17,10 +17,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"paprika-adapter/internal/mcpserver"
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/store"
-	"paprika-adapter/internal/syncer"
+	"github.com/pavel-alay/paprika-adapter/internal/mcpserver"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/store"
+	"github.com/pavel-alay/paprika-adapter/internal/syncer"
 )
 
 var version = "dev"

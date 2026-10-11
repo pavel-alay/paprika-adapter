@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/mcpserver"
+	"github.com/pavel-alay/paprika-adapter/internal/mcpserver"
 )
 
 var update = flag.Bool("update", false, "rewrite docs/tools.json from the current tool definitions")
@@ -33,7 +33,7 @@ func TestConfigDefaultsAreReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.writes || cfg.approval != mcpserver.ApprovalAuto || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" ||
-		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 {
+		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 || cfg.location != time.UTC {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 }

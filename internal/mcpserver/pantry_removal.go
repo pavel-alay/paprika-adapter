@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/store"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/store"
 )
 
 type ProposePantryRemovalIn struct {

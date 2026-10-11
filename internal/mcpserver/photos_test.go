@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/paprikatest"
+	"github.com/pavel-alay/paprika-adapter/internal/paprikatest"
 )
 
 const (

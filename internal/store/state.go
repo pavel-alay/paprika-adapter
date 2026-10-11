@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 // SyncState is what the cache knows about one collection's freshness.

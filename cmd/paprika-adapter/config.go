@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"paprika-adapter/internal/mcpserver"
+	"github.com/pavel-alay/paprika-adapter/internal/mcpserver"
 )
 
 type config struct {
@@ -29,7 +29,7 @@ type config struct {
 
 // loadConfig reads the environment. Secrets may come from NAME or from the file named by NAME_FILE.
 func loadConfig() (config, error) {
-	cfg := config{baseURL: os.Getenv("PAPRIKA_BASE_URL"), dataDir: os.Getenv("PAPRIKA_DATA_DIR"), location: time.Local}
+	cfg := config{baseURL: os.Getenv("PAPRIKA_BASE_URL"), dataDir: os.Getenv("PAPRIKA_DATA_DIR"), location: time.UTC}
 	var err error
 	if cfg.email, err = secret("PAPRIKA_EMAIL"); err != nil {
 		return cfg, err

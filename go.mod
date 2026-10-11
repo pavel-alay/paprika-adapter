@@ -1,4 +1,4 @@
-module paprika-adapter
+module github.com/pavel-alay/paprika-adapter
 
 go 1.27.1
 

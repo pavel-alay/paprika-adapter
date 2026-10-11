@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/syncer"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/syncer"
 )
 
 // verify exercises every read operation the adapter depends on against the

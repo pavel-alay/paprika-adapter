@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 const maxRecipeText = 20000

@@ -10,9 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/store"
-	"paprika-adapter/internal/syncer"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/store"
+	"github.com/pavel-alay/paprika-adapter/internal/syncer"
 )
 
 // Deps is everything the tools need.
@@ -52,7 +52,7 @@ func New(d Deps) *mcp.Server {
 		d.Now = time.Now
 	}
 	if d.Location == nil {
-		d.Location = time.Local
+		d.Location = time.UTC
 	}
 	if d.ProposalTTL <= 0 {
 		d.ProposalTTL = 15 * time.Minute

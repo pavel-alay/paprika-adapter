@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/mcpserver"
+	"github.com/pavel-alay/paprika-adapter/internal/mcpserver"
 )
 
 func groceryProposal(h *harness, names ...string) reply {

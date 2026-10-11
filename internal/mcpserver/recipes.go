@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"paprika-adapter/internal/ingredients"
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/store"
+	"github.com/pavel-alay/paprika-adapter/internal/ingredients"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/store"
 )
 
 type SearchRecipesIn struct {

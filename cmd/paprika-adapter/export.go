@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/syncer"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/syncer"
 )
 
 // export writes everything in the cache, exactly as Paprika returned it, into a

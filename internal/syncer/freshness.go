@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 const (

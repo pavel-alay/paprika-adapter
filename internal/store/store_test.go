@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/store"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/store"
 )
 
 func open(t *testing.T) *store.Store {

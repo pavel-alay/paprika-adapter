@@ -6,11 +6,11 @@ and re-checked only as far as stated. Treat it as unstable.
 Scope: **Paprika 3** cloud sync only (`/api/v2/sync/*` plus the `/api/v1/account/login/` login).
 Paprika 1/2 formats and `.paprikarecipes` files are not supported.
 
-## Status on your account
+## Verified against a real account
 
 **Reads: verified on 2026-10-09**, first from the cache a full sync
-produced, then with the live integration test (`TestLiveReads`, passed). The Paprika app version
-was not recorded; add it here. **Writes: the three create-only writes and the meal-plan edit verified on the same day** with the live
+produced, then with the live integration test (`TestLiveReads`, passed). The apps in use were
+Paprika 3.8.4. **Writes: the three create-only writes and the meal-plan edit verified on the same day** with the live
 integration tests, **the pantry edit and removal on 2026-10-10**. The recipe edit is not verified yet.
 
 | Write | Result on 2026-10-09 |
@@ -34,7 +34,7 @@ integration tests, **the pantry edit and removal on 2026-10-10**. The recipe edi
 
 New fields found, since added to the adapter's known list:
 
-| Where | Fields | Values on this account |
+| Where | Fields | Values seen |
 |---|---|---|
 | Recipe | `prep_minutes`, `cook_minutes`, `total_minutes`, `servings_min`, `servings_max`, `nutrition`, `cookbook_uid`, `metadata_version` | `null` on all 157 recipes |
 | Category | `cookbook_uid` | not inspected |
@@ -50,11 +50,6 @@ Still to do:
    where it shows up.
 2. The tool path (propose, approve, commit) has run against the fake only; the integration tests exercise the
    client layer underneath it.
-3. Optionally `paprika-adapter verify` for a per-operation report to paste below.
-
-```
-(paste the output of `paprika-adapter verify` here, with the date and your Paprika app version)
-```
 
 ## Evidence levels
 
@@ -63,14 +58,14 @@ Still to do:
 | **C** | Wire capture of the Paprika 3.8.4 macOS client (mitmproxy, sanitised HAR) in `bojanrajkovic/mcp-paprika` at `b7de3b8` (captures dated 2026-05) |
 | **T** | Described in `aarons22/paprika-tools` `API_REFERENCE.md` at `361b495`; its author reports live checks (meal writes: 2026-06-29) |
 | **L** | Observed by this project against `www.paprikaapp.com` on 2026-10-08, without an account |
-| **A** | Observed on a real account, see [Status on your account](#status-on-your-account) |
+| **A** | Observed on a real account, see [Verified against a real account](#verified-against-a-real-account) |
 | **I** | Inferred from the above; nobody has confirmed it |
 
 Fixture tests in this repo prove the adapter matches the shapes below. They prove nothing about Paprika.
 
 ## Operations
 
-| # | Operation | Request | Evidence | On your account |
+| # | Operation | Request | Evidence | On a real account |
 |---|---|---|---|---|
 | 1 | Login | `POST /api/v1/account/login/`, form fields `email`, `password` → `{"result":{"token"}}` | C (code), T | **A** 2026-10-09 |
 | 2 | Bad login | HTTP **200** with `{"error":{"code":0,"message":"Account not found."}}` | L | n/a |
@@ -116,9 +111,9 @@ Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The ada
 
 | Topic | Apps | Adapter | Why |
 |---|---|---|---|
-| Aisle for a new grocery item | always send an aisle | sends the aisle Paprika already remembers for that ingredient, otherwise `aisle: ""`, `aisle_uid: null` | no guessing; `paprika-tools` reports empty aisles work (T). Accepted and stored as sent on a real account (A 2026-10-09); where the apps display such an item is still to be looked at |
+| Aisle for a new grocery item | always send an aisle | sends the aisle Paprika already remembers for that ingredient, otherwise `aisle: ""`, `aisle_uid: null` | no guessing; `paprika-tools` reports empty aisles work (T). Accepted and stored as sent (A 2026-10-09); where the apps display such an item is still to be looked at |
 | Grocery ingredient catalog | post a companion `groceryingredients` row | does not | keeps v1 to a single write per commit |
-| Aisle for a new pantry item | send the aisle name and uid | the aisle Paprika remembers for that ingredient, otherwise `aisle: ""`, `aisle_uid: ""` | the captures show stored pantry rows with an empty `aisle_uid`; accepted on a real account (A 2026-10-09) |
+| Aisle for a new pantry item | send the aisle name and uid | the aisle Paprika remembers for that ingredient, otherwise `aisle: ""`, `aisle_uid: ""` | the captures show stored pantry rows with an empty `aisle_uid`; accepted as sent (A 2026-10-09) |
 | Pantry `notes`, `location_uid` | macOS omits them on write | omits them | matches the capture (C); Paprika returns them as `null` (A) |
 | Meal `is_ingredient`, `scale` | macOS omits them on write | omits them when creating; sends them back as read when editing, so that the whole-row replace cannot drop a scale | create matches the capture (C); the edit with both fields present was accepted (A 2026-10-09) |
 | `notify` ping after a write | used for recipe deletes only | never | not used by the apps for these collections |
@@ -144,7 +139,7 @@ Both `www.paprikaapp.com` and `paprikaapp.com` answered identically (L). The ada
 ## Photos (all A, 2026-10-09)
 
 - A recipe with a picture has `photo` (file name of a small cover thumbnail), `photo_hash` and, in the recipe
-  detail, `photo_url`. On this account 126 of 157 recipes have one. The reference notes say `photo_url` is
+  detail, `photo_url`. On the account checked, 126 of 157 recipes have one. The reference notes say `photo_url` is
   empty for uploaded photos; here it was set for every recipe with a `photo`.
 - `photo_hash` is the SHA-256 of the thumbnail bytes (checked on three recipes). The `hash` of a gallery photo
   is **not** the SHA-256 of what its link serves (checked on one); the adapter does not rely on either.

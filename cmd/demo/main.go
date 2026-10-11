@@ -22,7 +22,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"paprika-adapter/internal/paprikatest"
+	"github.com/pavel-alay/paprika-adapter/internal/paprikatest"
 )
 
 func main() {

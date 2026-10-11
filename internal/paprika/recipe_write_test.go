@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
 )
 
 // The expected hash was produced by an independent implementation of the

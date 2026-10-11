@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"paprika-adapter/internal/paprika"
-	"paprika-adapter/internal/paprikatest"
+	"github.com/pavel-alay/paprika-adapter/internal/paprika"
+	"github.com/pavel-alay/paprika-adapter/internal/paprikatest"
 )
 
 var day = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)

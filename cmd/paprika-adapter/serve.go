@@ -20,7 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"paprika-adapter/internal/mcpserver"
+	"github.com/pavel-alay/paprika-adapter/internal/mcpserver"
 )
 
 const (

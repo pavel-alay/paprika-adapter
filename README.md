@@ -6,8 +6,9 @@ of typed tools over HTTP, to clients that present a token. It is not a recipe da
 Paprika stays the source of truth.
 
 > **Unofficial API.** Paprika publishes no API; this talks to the same sync endpoints the apps use.
-> **Nothing authenticated has been verified against a real account yet** (it was built without credentials).
-> Run `verify` and the integration test before relying on it: [docs/PROTOCOL.md](docs/PROTOCOL.md).
+> **It works with Paprika 3.8.4**, checked against a real account in October 2026. Paprika can change the
+> API at any time: run `verify` and the integration test before relying on it, and see
+> [docs/PROTOCOL.md](docs/PROTOCOL.md) for what has been verified, operation by operation.
 
 ## What it does
 
@@ -51,7 +52,7 @@ make token                # a token for one MCP client
 make up                   # start the service on 127.0.0.1:8080
 ```
 
-Follow [docs/INSTALL.md](docs/INSTALL.md) for the steps in between (Linux ARM64, Docker, tokens, client config).
+Follow [docs/INSTALL.md](docs/INSTALL.md) for the steps in between (Docker, tokens, client configuration).
 
 ## Documentation
 
@@ -77,7 +78,7 @@ internal/paprikatest   in-memory fake Paprika with synthetic fixtures (tests and
 ```
 
 Go 1.27, three direct dependencies: the official MCP Go SDK, `modernc.org/sqlite` (pure Go, so the binary is
-static and needs no cgo on ARM64), and `google/uuid`.
+static and needs no cgo), and `google/uuid`.
 
 ## Tests
 
@@ -93,3 +94,7 @@ static and needs no cgo on ARM64), and `google/uuid`.
 Protocol knowledge comes from [bojanrajkovic/mcp-paprika](https://github.com/bojanrajkovic/mcp-paprika)
 (wire captures and write-format notes) and [aarons22/paprika-tools](https://github.com/aarons22/paprika-tools)
 (API notes). No code or fixture data was copied from either; the fixtures here are synthetic.
+
+## License
+
+[MIT](LICENSE)

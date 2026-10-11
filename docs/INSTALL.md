@@ -1,10 +1,11 @@
-# Install on Linux ARM64 (Docker, MCP over HTTP)
+# Install (Docker, MCP over HTTP)
 
 The adapter runs as one long-lived container and serves MCP (streamable HTTP) at `http://HOST:8080/mcp`.
 Every request must carry a bearer token; each person or agent gets their own. The container runs as uid
 65532 with a read-only root filesystem, no capabilities, and one named volume for the cache.
 
-Requirements: Linux on arm64 (aarch64), Docker, outbound HTTPS to `www.paprikaapp.com` and, for recipe photos, to `s3.amazonaws.com`.
+Requirements: a host with Docker, outbound HTTPS to `www.paprikaapp.com` and, for recipe
+photos, to `s3.amazonaws.com`.
 
 ## 1. Build the image
 
@@ -15,7 +16,7 @@ make image                      # docker build -t paprika-adapter:local .
 docker run --rm paprika-adapter:local version
 ```
 
-Building elsewhere: `docker buildx build --platform linux/arm64 -t paprika-adapter:local --load .`
+Building for another architecture: `docker buildx build --platform linux/arm64 -t paprika-adapter:local --load .`
 
 ## 2. Credentials and client tokens
 
@@ -23,7 +24,7 @@ Building elsewhere: `docker buildx build --platform linux/arm64 -t paprika-adapt
 install -d -m 700 ~/.config/paprika-adapter
 install -m 600 paprika.env.example ~/.config/paprika-adapter/paprika.env
 make token                                         # prints a new random token; run once per client
-$EDITOR ~/.config/paprika-adapter/paprika.env      # PAPRIKA_EMAIL, PAPRIKA_PASSWORD, PAPRIKA_TZ, PAPRIKA_AUTH_TOKENS
+$EDITOR ~/.config/paprika-adapter/paprika.env      # PAPRIKA_EMAIL, PAPRIKA_PASSWORD, PAPRIKA_AUTH_TOKENS
 ```
 
 `PAPRIKA_AUTH_TOKENS` is a comma-separated list of `name:token`, for example
@@ -49,9 +50,9 @@ make sync      # pulls everything once; prints per-collection state. The first r
 make verify    # probes each Paprika read operation; prints a Markdown report
 ```
 
-`make sync` must end with every collection `fresh`. Paste the `verify` output into
-[PROTOCOL.md](PROTOCOL.md#status-on-your-account) together with your Paprika app version: that is the record
-of what has actually been verified for your account. Any `FAILED` row or field drift: see [RUNBOOK.md](RUNBOOK.md).
+`make sync` must end with every collection `fresh`. Keep the `verify` output together with your Paprika app version: that is the record
+of what has actually been verified for your account
+(what was verified for this project is in [PROTOCOL.md](PROTOCOL.md#verified-against-a-real-account)). Any `FAILED` row or field drift: see [RUNBOOK.md](RUNBOOK.md).
 
 ## 4. Start the service
 
@@ -73,12 +74,13 @@ curl -s -X POST http://127.0.0.1:8080/mcp -H "Authorization: Bearer $TOKEN" \
 `make restart` after any change to `paprika.env` (the environment is fixed when the container is created).
 While it runs, the adapter refreshes its cache every `PAPRIKA_SYNC_INTERVAL`.
 
-To have it come back after a reboot without anyone logging in, the Docker daemon itself must start
-at boot: `systemctl --user enable docker` and, once, `sudo loginctl enable-linger $USER`.
+The container comes back after a reboot as long as the Docker daemon itself starts at boot.
 
 ## 5. Connect an MCP client
 
-Add to the client's MCP configuration (keep that file mode 600: it now holds a token):
+Any MCP client that speaks streamable HTTP and can send an `Authorization` header works. Point it at the
+URL and give it its token; the exact syntax depends on the client. A typical entry (keep the client's
+configuration file mode 600: it now holds a token):
 
 ```yaml
 mcp_servers:
@@ -86,15 +88,10 @@ mcp_servers:
     url: "http://127.0.0.1:8080/mcp"
     headers:
       Authorization: "Bearer PASTE-THIS-CLIENT'S-TOKEN"
-    timeout: 120
-    connect_timeout: 60
 ```
 
-Then reload the client. The tools appear as `mcp_paprika_search_recipes`, `mcp_paprika_get_meal_plan`,
-and so on. Ask the agent to call `mcp_paprika_sync_status`: `healthy` should be `true`. The exact syntax
-depends on the client.
-
-Any MCP client that speaks streamable HTTP and can send an `Authorization` header works the same way.
+Reload the client. The tools appear as `search_recipes`, `get_meal_plan` and so on (some clients prefix
+them with the server's name). Ask the agent to call `sync_status`: `healthy` should be `true`.
 
 ## 6. Share it with another user
 
@@ -131,7 +128,8 @@ logged with the name of the client that made it (`tool=commit_proposal client=an
 
 ## Without Docker
 
-`make linux-arm64` produces a static binary, `bin/paprika-adapter-linux-arm64`. Run it as an ordinary user,
+`make build` produces a static binary, `bin/paprika-adapter` (`make linux-arm64` cross-compiles one for
+Linux on arm64). Run it as an ordinary user,
 for example from a systemd user unit, with the same variables in its environment:
 
 ```sh
@@ -150,7 +148,7 @@ State then lives in `~/.local/state/paprika-adapter` (override with `PAPRIKA_DAT
 | `PAPRIKA_LISTEN` | `0.0.0.0:8080` in the image, else `127.0.0.1:8080` | address the HTTP server binds; MCP is served at `/mcp` |
 | `PAPRIKA_ENABLE_WRITES` | `false` | register the propose/commit tools |
 | `PAPRIKA_APPROVAL` | `auto` | `auto` = ask the user through an approval prompt when the client can show one; `human` = refuse writes unless it can; `none` = no prompt, a client with a token writes straight away |
-| `PAPRIKA_TZ` | process zone (UTC in the container) | decides "today" and the default week |
+| `PAPRIKA_TZ` | `UTC` | IANA zone name, for example `America/New_York`; decides "today" and the default week |
 | `PAPRIKA_MAX_AGE` | `5m` | cached data older than this is re-checked before being served |
 | `PAPRIKA_SYNC_INTERVAL` | `15m` | background refresh while serving; `0` disables |
 | `PAPRIKA_DATA_DIR` | `/data` in the image, else `~/.local/state/paprika-adapter` | cache and Paprika token |

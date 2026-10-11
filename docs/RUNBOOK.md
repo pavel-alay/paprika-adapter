@@ -55,15 +55,15 @@ it cannot overwrite an edit made in an app. What can still happen:
 
 | Symptom | Meaning | Action |
 |---|---|---|
-| Data in the client is older than the app | the app has not synced to the cloud yet, or the cache is `stale` | sync the app; `sync_status` with `refresh: true` |
-| Something added by the client is missing in the app | the app has not pulled yet | sync the app; confirm with `list_grocery_items` / `get_meal_plan`, which read Paprika's cloud copy |
+| Data the agent sees is older than the app | the app has not synced to the cloud yet, or the cache is `stale` | sync the app; `sync_status` with `refresh: true` |
+| Something added through the adapter is missing in the app | the app has not pulled yet | sync the app; confirm with `list_grocery_items` / `get_meal_plan`, which read Paprika's cloud copy |
 | `duplicate` on propose or commit | the item or meal is already there (possibly added from a phone meanwhile) | nothing; or repeat with `allow_duplicates` if intended |
 | `skipped` entries in a commit result | those items appeared in Paprika between propose and commit | nothing |
 | `upstream_unavailable` on commit, "unknown whether Paprika received the write" | the response was lost | call `commit_proposal` again; it re-reads first and cannot double-add |
 | `write_not_verified` | Paprika acknowledged but does not return the row yet | call `commit_proposal` again; if it persists, check the app, then treat as a protocol change |
 | `uid_conflict` | Paprika holds a different row under the freshly minted uid (should not happen) | nothing was overwritten; propose again and report it |
 | `proposal_expired` | more than 15 minutes between propose and commit | propose again |
-| Recipe edited in the app, the client shows the old text | recipe hash not re-checked yet | wait `PAPRIKA_MAX_AGE` or refresh; the cached copy is replaced, never merged |
+| Recipe edited in the app, the agent shows the old text | recipe hash not re-checked yet | wait `PAPRIKA_MAX_AGE` or refresh; the cached copy is replaced, never merged |
 | Recipes stuck `stale` with "N of M changed recipes could not be fetched" | some recipe fetches failed | it resumes on the next sync; persistent failure on the same recipes points at a protocol change |
 
 To undo a write, delete the item or meal in the Paprika app. Only pantry items can be removed through the
@@ -119,7 +119,7 @@ with a second pantry item of its own.
 1. In the Paprika app create a grocery list whose name contains `test` (for example `adapter-test`), and
    a throwaway recipe whose name contains `test` (it enables the recipe edit test, which changes its rating
    and texts and then restores them). Sync the app.
-2. Find the uids: `list_grocery_lists` in the client, or `make sync` then `search_recipes`.
+2. Find the uids: `list_grocery_lists` through an MCP client, or `make sync` then `search_recipes`.
 3. Run on a machine with Go:
 
 ```sh
