@@ -37,10 +37,10 @@ type harness struct {
 	logs    bytes.Buffer
 	replies bytes.Buffer // every tool reply, as the agent would see it
 
-	approval string   // how the user answers an approval prompt; "" = the client cannot prompt
-	prompts  []string // approval prompts shown to the user
-	human    bool     // server insists on a prompt
-	protocol string   // MCP protocol revision the client speaks; "" = newest
+	approval string             // how the user answers an approval prompt; "" = the client cannot prompt
+	prompts  []string           // approval prompts shown to the user
+	mode     mcpserver.Approval // "" = auto
+	protocol string             // MCP protocol revision the client speaks; "" = newest
 }
 
 func newHarness(t *testing.T, writes bool, opts ...func(*harness)) *harness {
@@ -65,7 +65,7 @@ func newHarness(t *testing.T, writes bool, opts ...func(*harness)) *harness {
 	sy := syncer.New(client, st, log)
 	sy.Now = clock
 	srv := mcpserver.New(mcpserver.Deps{Store: st, Sync: sy, Client: client, WritesEnabled: writes,
-		Location: time.UTC, Now: clock, Version: "test", RequireHumanApproval: h.human})
+		Location: time.UTC, Now: clock, Version: "test", Approval: h.mode})
 	var clientOpts *mcp.ClientOptions
 	if h.approval != "" {
 		clientOpts = &mcp.ClientOptions{ElicitationHandler: func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {

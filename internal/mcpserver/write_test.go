@@ -1,9 +1,12 @@
 package mcpserver_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
+
+	"paprika-adapter/internal/mcpserver"
 )
 
 func groceryProposal(h *harness, names ...string) reply {
@@ -295,10 +298,33 @@ func TestUserDeclinesAndNothingIsWritten(t *testing.T) {
 }
 
 func TestHumanApprovalCanBeMandatory(t *testing.T) {
-	h := newHarness(t, true, func(h *harness) { h.human = true }) // client cannot prompt
+	h := newHarness(t, true, func(h *harness) { h.mode = mcpserver.ApprovalHuman }) // client cannot prompt
 	p := groceryProposal(h, "oat milk").Proposal
 	h.fails("commit_proposal", map[string]any{"proposal_id": p.ProposalID, "confirm": true}, "approval_unavailable")
 	if h.posts("groceries") != 0 {
 		t.Fatal("wrote without the mandatory approval")
+	}
+}
+
+func TestApprovalNoneWritesWithoutAskingAnyone(t *testing.T) {
+	h := newHarness(t, true, func(h *harness) { h.approval, h.mode = "decline", mcpserver.ApprovalNone }) // the client could prompt
+	p := groceryProposal(h, "oat milk").Proposal
+	if r := h.fails("commit_proposal", map[string]any{"proposal_id": p.ProposalID, "confirm": false}, "confirmation_required"); strings.Contains(r.Error.Message, "approved") {
+		t.Fatalf("error = %+v", r.Error)
+	}
+	c := h.ok("commit_proposal", map[string]any{"proposal_id": p.ProposalID, "confirm": true})
+	if !c.Verified || len(h.prompts) != 0 || h.posts("groceries") != 1 {
+		t.Fatalf("commit = %+v prompts = %q posts = %d", c, h.prompts, h.posts("groceries"))
+	}
+	res, err := h.session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	told := h.session.InitializeResult().Instructions
+	for _, tool := range res.Tools {
+		told += tool.Description
+	}
+	if strings.Contains(told, "approve") || !strings.Contains(told, "asks for no approval") {
+		t.Fatalf("the agent is still told to seek approval: %s", told)
 	}
 }

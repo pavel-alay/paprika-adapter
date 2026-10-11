@@ -32,7 +32,7 @@ Paprika stays the source of truth.
   from Paprika at that moment, so every other field is sent back as it was.
 - One write removes data: pantry items, named one by one by uid.
 - A write needs `confirm: true` from the agent and, where the client supports MCP elicitation,
-  an explicit approval from the user.
+  an explicit approval from the user. `PAPRIKA_APPROVAL=none` turns the approval off: a token is then enough.
 - Recipe and list text is returned as data. It can come from anywhere (imported web recipes), so the agent
   should not treat it as instructions; the approval step is what stands between such text and a write.
 - MCP is served at `/mcp` (streamable HTTP) and only to requests with a known bearer token. Each client has

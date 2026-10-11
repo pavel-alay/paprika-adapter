@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"paprika-adapter/internal/mcpserver"
 )
 
 type config struct {
@@ -18,7 +20,7 @@ type config struct {
 	listen       string
 	clients      []clientToken
 	writes       bool
-	humanOnly    bool
+	approval     mcpserver.Approval
 	maxAge       time.Duration
 	syncInterval time.Duration
 	location     *time.Location
@@ -62,12 +64,12 @@ func loadConfig() (config, error) {
 	if cfg.writes, err = envBool("PAPRIKA_ENABLE_WRITES"); err != nil {
 		return cfg, err
 	}
-	switch v := os.Getenv("PAPRIKA_APPROVAL"); v {
-	case "", "auto":
-	case "human":
-		cfg.humanOnly = true
+	switch cfg.approval = mcpserver.Approval(os.Getenv("PAPRIKA_APPROVAL")); cfg.approval {
+	case "":
+		cfg.approval = mcpserver.ApprovalAuto
+	case mcpserver.ApprovalAuto, mcpserver.ApprovalHuman, mcpserver.ApprovalNone:
 	default:
-		return cfg, fmt.Errorf("PAPRIKA_APPROVAL must be auto or human")
+		return cfg, fmt.Errorf("PAPRIKA_APPROVAL must be auto, human or none")
 	}
 	if cfg.maxAge, err = envDuration("PAPRIKA_MAX_AGE", 5*time.Minute); err != nil {
 		return cfg, err

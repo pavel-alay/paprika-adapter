@@ -110,6 +110,9 @@ new rows. Three change existing data: `propose_recipe_edit` (four fields of a re
 2. **Approve.** The agent shows `summary` to the user. If the client supports MCP elicitation,
    `commit_proposal` also puts the same summary to the user directly and writes only on *accept*.
    With `PAPRIKA_APPROVAL=human` a client that cannot prompt cannot write at all.
+   With `PAPRIKA_APPROVAL=none` this step does not exist: the adapter sends no prompt, its instructions tell
+   the agent to commit without asking, and `confirm: true` is all a commit needs. Propose and commit stay
+   two calls, because the stored proposal is what makes a retried commit safe.
 3. **Commit.** The adapter re-reads the collection from Paprika, then:
    - rows whose uid is already there are not sent again;
    - rows that would now duplicate something added elsewhere are skipped (`duplicate` if nothing is left);

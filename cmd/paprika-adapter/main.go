@@ -112,7 +112,7 @@ func newApp(ctx context.Context) (*app, error) {
 func (a *app) deps() mcpserver.Deps {
 	return mcpserver.Deps{
 		Store: a.store, Sync: a.sync, Client: a.client, WritesEnabled: a.cfg.writes,
-		Location: a.cfg.location, Version: version, RequireHumanApproval: a.cfg.humanOnly,
+		Location: a.cfg.location, Version: version, Approval: a.cfg.approval,
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 
 type CommitIn struct {
 	ProposalID string `json:"proposal_id" jsonschema:"id returned by one of the propose tools"`
-	Confirm    bool   `json:"confirm" jsonschema:"must be true, and only after the user has approved the proposal summary"`
+	Confirm    bool   `json:"confirm" jsonschema:"must be true; without it nothing is written"`
 }
 
 // CommitResult is what a commit reports, and what is stored to answer repeats.
@@ -67,7 +67,11 @@ func (s *server) commitProposal(ctx context.Context, in CommitIn, out *CommitOut
 		return nil
 	}
 	if !in.Confirm {
-		return &ToolError{Code: "confirmation_required", Message: "nothing was written: confirm must be true, and only after the user approved the proposal summary"}
+		terr := &ToolError{Code: "confirmation_required", Message: "nothing was written: confirm must be true"}
+		if s.Approval != ApprovalNone {
+			terr.Message += ", and only after the user approved the proposal summary"
+		}
+		return terr
 	}
 	if s.Now().After(prop.ExpiresAt) {
 		return &ToolError{Code: "proposal_expired", Message: "nothing was written: the proposal expired at " + prop.ExpiresAt.UTC().Format(time.RFC3339) + "; propose again"}
@@ -116,11 +120,14 @@ const approvalID = "approval"
 // approve asks the user, through the client, whether the write may happen. The
 // first pass returns the question; the handler runs again once it is answered.
 // A client that cannot ask is trusted to have asked itself, unless the server
-// is configured to insist on a direct answer.
+// is configured to insist on a direct answer. With ApprovalNone nobody is asked.
 func (s *server) approve(ctx context.Context, summary string) *ToolError {
+	if s.Approval == ApprovalNone {
+		return nil
+	}
 	c, _ := ctx.Value(callKey{}).(*call)
 	if c == nil || !canElicit(c.req.Session) {
-		if s.RequireHumanApproval {
+		if s.Approval == ApprovalHuman {
 			return &ToolError{Code: "approval_unavailable", Message: "nothing was written: this server writes only after the user approves through MCP elicitation, which this client does not offer"}
 		}
 		return nil

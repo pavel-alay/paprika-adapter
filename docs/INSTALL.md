@@ -106,7 +106,8 @@ Give each additional person or agent their own entry in `PAPRIKA_AUTH_TOKENS` (`
 | Another account on the same machine | `http://127.0.0.1:8080/mcp` | The port is reachable by every account and process on the machine; the token is the only thing that separates them. |
 | Another machine on the home network | `http://<host address>:8080/mcp` | Start with `make up PUBLISH=<host address>:8080` (or `0.0.0.0:8080`). Traffic is plain HTTP: anyone who can observe the network sees the token and the data. Put a TLS reverse proxy in front for anything beyond a network you trust. |
 
-What a token allows: every tool the server exposes, including the write tools when they are enabled. There
+What a token allows: every tool the server exposes, including the write tools when they are enabled. With
+`PAPRIKA_APPROVAL=none` that means writing, editing and removing with no person in between, for every client. There
 are no per-client permissions in v1; a client that must stay read-only can hide the write tools on its side
 if it has such a setting, which is a convenience, not a control.
 
@@ -120,7 +121,8 @@ Only after step 3 is clean and the read tools have been used for a while:
 1. Take a backup: Paprika app → export, and `make export` (see [RUNBOOK.md](RUNBOOK.md#backup-and-export)).
 2. Run the integration test against a disposable list ([RUNBOOK.md](RUNBOOK.md#verifying-writes)).
 3. Set `PAPRIKA_ENABLE_WRITES=true` in `paprika.env`, and `PAPRIKA_APPROVAL=human` if nothing may be written
-   without a person pressing approve in the client that asked. `make restart`, then reload the client.
+   without a person pressing approve in the client that asked, or `PAPRIKA_APPROVAL=none` if a client holding
+   a token may write without anyone being asked. `make restart`, then reload the client.
 
 Eight more tools appear: `propose_meal_plan_entry`, `propose_meal_plan_edit`, `propose_grocery_items`,
 `propose_pantry_items`, `propose_pantry_edit`, `propose_pantry_removal`, `propose_recipe_edit`,
@@ -147,7 +149,7 @@ State then lives in `~/.local/state/paprika-adapter` (override with `PAPRIKA_DAT
 | `PAPRIKA_AUTH_TOKENS` | required by `serve` | `name:token` entries separated by commas or whitespace; or `PAPRIKA_AUTH_TOKENS_FILE` naming a file with one entry per line |
 | `PAPRIKA_LISTEN` | `0.0.0.0:8080` in the image, else `127.0.0.1:8080` | address the HTTP server binds; MCP is served at `/mcp` |
 | `PAPRIKA_ENABLE_WRITES` | `false` | register the propose/commit tools |
-| `PAPRIKA_APPROVAL` | `auto` | `human` = refuse writes unless the client can show an approval prompt |
+| `PAPRIKA_APPROVAL` | `auto` | `auto` = ask the user through an approval prompt when the client can show one; `human` = refuse writes unless it can; `none` = no prompt, a client with a token writes straight away |
 | `PAPRIKA_TZ` | process zone (UTC in the container) | decides "today" and the default week |
 | `PAPRIKA_MAX_AGE` | `5m` | cached data older than this is re-checked before being served |
 | `PAPRIKA_SYNC_INTERVAL` | `15m` | background refresh while serving; `0` disables |

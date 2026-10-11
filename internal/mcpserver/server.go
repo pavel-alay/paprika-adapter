@@ -25,10 +25,21 @@ type Deps struct {
 	Now           func() time.Time
 	Version       string
 	ProposalTTL   time.Duration
-	// RequireHumanApproval refuses a commit unless the user approved it through
-	// MCP elicitation. When false, a client without elicitation commits on confirm=true alone.
-	RequireHumanApproval bool
+	Approval      Approval // who must agree before a commit writes; default ApprovalAuto
 }
+
+// Approval says who must agree before commit_proposal writes.
+type Approval string
+
+const (
+	// ApprovalAuto asks the user through MCP elicitation when the client offers it;
+	// a client without it commits on confirm=true alone.
+	ApprovalAuto Approval = "auto"
+	// ApprovalHuman refuses a commit unless the user approved it through MCP elicitation.
+	ApprovalHuman Approval = "human"
+	// ApprovalNone asks nobody: holding a client token is enough to write.
+	ApprovalNone Approval = "none"
+)
 
 type server struct {
 	Deps
@@ -46,14 +57,27 @@ func New(d Deps) *mcp.Server {
 	if d.ProposalTTL <= 0 {
 		d.ProposalTTL = 15 * time.Minute
 	}
+	if d.Approval == "" {
+		d.Approval = ApprovalAuto
+	}
 	s := &server{Deps: d}
+	// What the agent is told about asking the user depends on whether anyone has to be asked.
+	flow := "Writes, when enabled, are two-step: propose, show the summary to the user, and call commit_proposal only after they approve. "
+	asked := "If the client supports MCP elicitation the user is also asked directly before anything is written."
+	commit := "Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports " +
+		"MCP elicitation the user is asked to approve the exact summary first. "
+	if d.Approval == ApprovalNone {
+		flow = "Writes, when enabled, are two-step: propose, then commit_proposal with confirm=true. "
+		asked = "This server asks for no approval: commit what the user asked for without asking them again, and tell them what was written."
+		commit = "Write a proposal to Paprika, then read it back to verify. No approval is asked for. "
+	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "paprika-adapter", Title: "Paprika household adapter", Version: d.Version}, &mcp.ServerOptions{
 		Instructions: "Read-only view of one household's Paprika 3 account (recipes, pantry, meal plan, grocery lists) " +
 			"served from a local cache. Every result carries a sync block: treat state=stale as possibly outdated and say so. " +
-			"Writes, when enabled, are two-step: propose, show the summary to the user, and call commit_proposal only after they approve. " +
+			flow +
 			"Writes add rows, except the edit tools (propose_recipe_edit, propose_meal_plan_edit, propose_pantry_edit), which overwrite an existing " +
 			"recipe, meal-plan entry or pantry item, and propose_pantry_removal, which removes pantry items. " +
-			"If the client supports MCP elicitation the user is also asked directly before anything is written.",
+			asked,
 	})
 
 	add(srv, readTool("search_recipes", "Search recipes",
@@ -99,8 +123,7 @@ func New(d Deps) *mcp.Server {
 				"A given field REPLACES what the recipe has; append_note adds to the notes instead. Returns a proposal_id, a summary "+
 				"and the old and new value of every field to show the user.", false, false), s.proposeRecipeEdit)
 		add(srv, writeTool("commit_proposal", "Commit proposal",
-			"Write a proposal to Paprika after the user approved it, then read it back to verify. If the client supports "+
-				"MCP elicitation the user is asked to approve the exact summary first. Safe to repeat: a retried commit never creates duplicates. "+
+			commit+"Safe to repeat: a retried commit never creates duplicates. "+
 				"Committing an edit overwrites the edited fields of that recipe, meal-plan entry or pantry item; committing a removal "+
 				"removes the named pantry items.", true, true), s.commitProposal)
 	}

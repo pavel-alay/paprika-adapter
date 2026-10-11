@@ -87,7 +87,7 @@ func serve(ctx context.Context) error {
 		names = append(names, c.name)
 	}
 	a.log.Info("paprika-adapter starting", "version", version, "listen", ln.Addr().String(), "path", mcpPath, "clients", names,
-		"writes_enabled", a.cfg.writes, "paprika_host", a.client.Host(), "data_dir", a.cfg.dataDir)
+		"writes_enabled", a.cfg.writes, "approval", a.cfg.approval, "paprika_host", a.client.Host(), "data_dir", a.cfg.dataDir)
 	if a.cfg.syncInterval > 0 {
 		go a.sync.Run(ctx, a.cfg.syncInterval)
 	}

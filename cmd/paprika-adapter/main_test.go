@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"paprika-adapter/internal/mcpserver"
 )
 
 var update = flag.Bool("update", false, "rewrite docs/tools.json from the current tool definitions")
@@ -30,7 +32,7 @@ func TestConfigDefaultsAreReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.writes || cfg.humanOnly || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" ||
+	if cfg.writes || cfg.approval != mcpserver.ApprovalAuto || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" ||
 		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
@@ -53,7 +55,7 @@ func TestConfigReadsSecretsFromFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.password != "s3cret with spaces " || !cfg.writes || !cfg.humanOnly || cfg.location.String() != "America/New_York" || cfg.syncInterval != 0 ||
+	if cfg.password != "s3cret with spaces " || !cfg.writes || cfg.approval != mcpserver.ApprovalHuman || cfg.location.String() != "America/New_York" || cfg.syncInterval != 0 ||
 		cfg.listen != "0.0.0.0:9000" || len(cfg.clients) != 2 {
 		t.Fatalf("config = %+v", cfg)
 	}
