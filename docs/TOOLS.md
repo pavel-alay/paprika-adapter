@@ -49,6 +49,7 @@ Conventions: uids are Paprika's own and stable. Adapter timestamps are RFC 3339 
 | `approval_declined` | the user declined the approval prompt | no |
 | `approval_unavailable` | approval is mandatory and the client cannot prompt, or the prompt failed | no |
 | `proposal_expired` | proposals live 15 minutes | propose again |
+| `tool_not_allowed` | the proposal's kind is left out of `PAPRIKA_TOOLS`; nothing was written | no |
 | `write_not_verified` | written but not readable back yet | yes, repeat the commit |
 | `uid_conflict` | Paprika already holds a different row under the minted uid; nothing overwritten | propose again |
 | `cache_error` | local SQLite problem | no |

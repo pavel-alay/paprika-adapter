@@ -26,6 +26,9 @@ type Deps struct {
 	Version       string
 	ProposalTTL   time.Duration
 	Approval      Approval // who must agree before a commit writes; default ApprovalAuto
+	// Tools is an allowlist of tool names, see ParseTools; empty serves every tool.
+	// Write tools still need WritesEnabled.
+	Tools []string
 }
 
 // Approval says who must agree before commit_proposal writes.
@@ -43,6 +46,7 @@ const (
 
 type server struct {
 	Deps
+	writes  bool       // the propose and commit tools are served
 	writeMu sync.Mutex // one commit at a time
 }
 
@@ -60,7 +64,8 @@ func New(d Deps) *mcp.Server {
 	if d.Approval == "" {
 		d.Approval = ApprovalAuto
 	}
-	s := &server{Deps: d}
+	allow := allowed(d.Tools)
+	s := &server{Deps: d, writes: d.WritesEnabled && (allow == nil || allow[CommitTool])}
 	// What the agent is told about asking the user depends on whether anyone has to be asked.
 	flow := "Writes, when enabled, are two-step: propose, show the summary to the user, and call commit_proposal only after they approve. "
 	asked := "If the client supports MCP elicitation the user is also asked directly before anything is written."
@@ -71,58 +76,62 @@ func New(d Deps) *mcp.Server {
 		asked = "This server asks for no approval: commit what the user asked for without asking them again, and tell them what was written."
 		commit = "Write a proposal to Paprika, then read it back to verify. No approval is asked for. "
 	}
+	instructions := "Read-only view of one household's Paprika 3 account (recipes, pantry, meal plan, grocery lists) " +
+		"served from a local cache. Every result carries a sync block: treat state=stale as possibly outdated and say so."
+	if s.writes {
+		instructions += " " + flow +
+			"Writes add rows, except the edit tools (propose_*_edit), which overwrite an existing item, and propose_pantry_removal, " +
+			"which removes pantry items; only the tools listed by this server are available. " +
+			asked
+	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "paprika-adapter", Title: "Paprika household adapter", Version: d.Version}, &mcp.ServerOptions{
-		Instructions: "Read-only view of one household's Paprika 3 account (recipes, pantry, meal plan, grocery lists) " +
-			"served from a local cache. Every result carries a sync block: treat state=stale as possibly outdated and say so. " +
-			flow +
-			"Writes add rows, except the edit tools (propose_recipe_edit, propose_meal_plan_edit, propose_pantry_edit), which overwrite an existing " +
-			"recipe, meal-plan entry or pantry item, and propose_pantry_removal, which removes pantry items. " +
-			asked,
+		Instructions: instructions,
 	})
+	reg := registry{srv: srv, allow: allow}
 
-	add(srv, readTool("search_recipes", "Search recipes",
+	add(reg, readTool("search_recipes", "Search recipes",
 		"Full-text search over cached Paprika recipes. Returns compact summaries; use get_recipe for ingredients and directions."), s.searchRecipes)
-	add(srv, readTool("get_recipe", "Get recipe",
+	add(reg, readTool("get_recipe", "Get recipe",
 		"Full details of one recipe by uid, including Paprika's raw ingredient text and a best-effort parsed version of it."), s.getRecipe)
-	add(srv, readTool("get_recipe_photo", "Get recipe photo",
+	add(reg, readTool("get_recipe_photo", "Get recipe photo",
 		"A recipe's photo as an image. By default the small cover thumbnail; size=full returns a full-resolution gallery photo, "+
 			"which only some recipes have. get_recipe says whether a recipe has a photo and how many gallery photos."), s.getRecipePhoto)
-	add(srv, readTool("list_pantry", "List pantry",
+	add(reg, readTool("list_pantry", "List pantry",
 		"Pantry items from Paprika, optionally filtered by ingredient text or stock status."), s.listPantry)
-	add(srv, readTool("get_meal_plan", "Get meal plan",
+	add(reg, readTool("get_meal_plan", "Get meal plan",
 		"Dated meal-plan entries for a date range (default: the current Monday-to-Sunday week), plus the meal types available for planning."), s.getMealPlan)
-	add(srv, readTool("list_grocery_lists", "List grocery lists",
+	add(reg, readTool("list_grocery_lists", "List grocery lists",
 		"Paprika grocery lists with item counts. Use a list's uid with list_grocery_items or propose_grocery_items."), s.listGroceryLists)
-	add(srv, readTool("list_grocery_items", "List grocery items",
+	add(reg, readTool("list_grocery_items", "List grocery items",
 		"Items on one grocery list. Purchased items are left out unless include_purchased is true."), s.listGroceryItems)
-	add(srv, readTool("sync_status", "Sync status",
+	add(reg, readTool("sync_status", "Sync status",
 		"Health of the adapter: per-collection freshness, last sync errors, protocol drift, and whether writes are enabled."), s.syncStatus)
 
-	if d.WritesEnabled {
-		add(srv, writeTool("propose_meal_plan_entry", "Propose meal plan entry",
+	if s.writes {
+		add(reg, writeTool("propose_meal_plan_entry", "Propose meal plan entry",
 			"Prepare ONE meal-plan entry for a date. Writes nothing. Returns a proposal_id and a summary to show the user; "+
 				"the entry is created only by commit_proposal.", false, false), s.proposeMeal)
-		add(srv, writeTool("propose_meal_plan_edit", "Propose meal plan edit",
+		add(reg, writeTool("propose_meal_plan_edit", "Propose meal plan edit",
 			"Prepare a change to ONE existing meal-plan entry: move it to another day, change its meal type, or plan a different "+
 				"recipe or text in its place. Writes nothing. Returns a proposal_id, a summary, and the entry before and after.", false, false), s.proposeMealEdit)
-		add(srv, writeTool("propose_grocery_items", "Propose grocery items",
+		add(reg, writeTool("propose_grocery_items", "Propose grocery items",
 			"Prepare items to add to one grocery list. Writes nothing. Items already on the list (unpurchased, same name) are skipped "+
 				"unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false, false), s.proposeGroceries)
-		add(srv, writeTool("propose_pantry_items", "Propose pantry items",
+		add(reg, writeTool("propose_pantry_items", "Propose pantry items",
 			"Prepare items to add to the Paprika pantry, as in stock and bought today. Writes nothing. Ingredients already in the pantry "+
 				"are skipped unless allow_duplicates is true. Returns a proposal_id and a summary to show the user.", false, false), s.proposePantry)
-		add(srv, writeTool("propose_pantry_edit", "Propose pantry edit",
+		add(reg, writeTool("propose_pantry_edit", "Propose pantry edit",
 			"Prepare a change to ONE existing pantry item: its quantity, whether it is in stock, its expiration or purchase date, "+
 				"or its name. Writes nothing. Returns a proposal_id, a summary, and the item before and after.", false, false), s.proposePantryEdit)
-		add(srv, writeTool("propose_pantry_removal", "Propose pantry removal",
+		add(reg, writeTool("propose_pantry_removal", "Propose pantry removal",
 			"Prepare the removal of pantry items, named by uid. Writes nothing. To record that something is used up but keep it "+
 				"in the pantry, use propose_pantry_edit with in_stock=false instead. Returns a proposal_id, a summary and the items "+
 				"that would be removed.", false, false), s.proposePantryRemoval)
-		add(srv, writeTool("propose_recipe_edit", "Propose recipe edit",
+		add(reg, writeTool("propose_recipe_edit", "Propose recipe edit",
 			"Prepare a change to an existing recipe: its star rating, notes, description or directions. Writes nothing. "+
 				"A given field REPLACES what the recipe has; append_note adds to the notes instead. Returns a proposal_id, a summary "+
 				"and the old and new value of every field to show the user.", false, false), s.proposeRecipeEdit)
-		add(srv, writeTool("commit_proposal", "Commit proposal",
+		add(reg, writeTool("commit_proposal", "Commit proposal",
 			commit+"Safe to repeat: a retried commit never creates duplicates. "+
 				"Committing an edit overwrites the edited fields of that recipe, meal-plan entry or pantry item; committing a removal "+
 				"removes the named pantry items.", true, true), s.commitProposal)
@@ -186,8 +195,11 @@ type callKey struct{}
 func add[In, Out any, P interface {
 	*Out
 	envelope
-}](srv *mcp.Server, tool *mcp.Tool, h func(context.Context, In, P) *ToolError) {
-	mcp.AddTool(srv, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+}](reg registry, tool *mcp.Tool, h func(context.Context, In, P) *ToolError) {
+	if !reg.serves(tool.Name) {
+		return
+	}
+	mcp.AddTool(reg.srv, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		var out Out
 		c := &call{req: req}
 		terr := h(context.WithValue(ctx, callKey{}, c), in, &out)

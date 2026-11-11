@@ -154,6 +154,6 @@ func (s *server) syncStatus(ctx context.Context, in SyncStatusIn, out *SyncStatu
 			out.Healthy = false
 		}
 	}
-	out.WritesEnabled, out.PaprikaHost, out.AdapterVersion = s.WritesEnabled, s.Client.Host(), s.Version
+	out.WritesEnabled, out.PaprikaHost, out.AdapterVersion = s.writes, s.Client.Host(), s.Version
 	return nil
 }

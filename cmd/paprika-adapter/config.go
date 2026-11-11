@@ -21,6 +21,7 @@ type config struct {
 	clients      []clientToken
 	writes       bool
 	approval     mcpserver.Approval
+	tools        []string
 	maxAge       time.Duration
 	syncInterval time.Duration
 	location     *time.Location
@@ -63,6 +64,12 @@ func loadConfig() (config, error) {
 	}
 	if cfg.writes, err = envBool("PAPRIKA_ENABLE_WRITES"); err != nil {
 		return cfg, err
+	}
+	if cfg.tools, err = mcpserver.ParseTools(os.Getenv("PAPRIKA_TOOLS")); err != nil {
+		return cfg, fmt.Errorf("PAPRIKA_TOOLS: %w", err)
+	}
+	if !cfg.writes && mcpserver.HasWriteTools(cfg.tools) {
+		return cfg, fmt.Errorf("PAPRIKA_TOOLS lists write tools, but PAPRIKA_ENABLE_WRITES is not true")
 	}
 	switch cfg.approval = mcpserver.Approval(os.Getenv("PAPRIKA_APPROVAL")); cfg.approval {
 	case "":

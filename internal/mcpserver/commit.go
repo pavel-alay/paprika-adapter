@@ -66,6 +66,11 @@ func (s *server) commitProposal(ctx context.Context, in CommitIn, out *CommitOut
 		out.Status = statusAlreadyCommitted
 		return nil
 	}
+	// Checked after the repeat above: a write that already happened is reported
+	// as such even when the allowlist has changed since.
+	if !commitAllowed(s.Tools, prop.Kind) {
+		return &ToolError{Code: "tool_not_allowed", Message: "nothing was written: this server does not serve " + proposeToolOf[prop.Kind] + ", so it does not commit " + prop.Kind + " proposals"}
+	}
 	if !in.Confirm {
 		terr := &ToolError{Code: "confirmation_required", Message: "nothing was written: confirm must be true"}
 		if s.Approval != ApprovalNone {
