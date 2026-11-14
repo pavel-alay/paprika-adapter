@@ -41,6 +41,8 @@ type harness struct {
 	prompts  []string           // approval prompts shown to the user
 	mode     mcpserver.Approval // "" = auto
 	protocol string             // MCP protocol revision the client speaks; "" = newest
+	tools    []string           // tool allowlist; nil = every tool
+	cache    string             // path of the SQLite cache; "" = a fresh one
 }
 
 func newHarness(t *testing.T, writes bool, opts ...func(*harness)) *harness {
@@ -58,14 +60,17 @@ func newHarness(t *testing.T, writes bool, opts ...func(*harness)) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "cache.sqlite"))
+	if h.cache == "" {
+		h.cache = filepath.Join(t.TempDir(), "cache.sqlite")
+	}
+	st, err := store.Open(context.Background(), h.cache)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sy := syncer.New(client, st, log)
 	sy.Now = clock
 	srv := mcpserver.New(mcpserver.Deps{Store: st, Sync: sy, Client: client, WritesEnabled: writes,
-		Location: time.UTC, Now: clock, Version: "test", Approval: h.mode})
+		Location: time.UTC, Now: clock, Version: "test", Approval: h.mode, Tools: h.tools})
 	var clientOpts *mcp.ClientOptions
 	if h.approval != "" {
 		clientOpts = &mcp.ClientOptions{ElicitationHandler: func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {

@@ -18,7 +18,7 @@ var update = flag.Bool("update", false, "rewrite docs/tools.json from the curren
 func setEnv(t *testing.T, kv ...string) {
 	t.Helper()
 	for _, name := range []string{"PAPRIKA_EMAIL", "PAPRIKA_PASSWORD", "PAPRIKA_EMAIL_FILE", "PAPRIKA_PASSWORD_FILE", "PAPRIKA_BASE_URL",
-		"PAPRIKA_DATA_DIR", "PAPRIKA_LISTEN", "PAPRIKA_AUTH_TOKENS", "PAPRIKA_AUTH_TOKENS_FILE", "PAPRIKA_ENABLE_WRITES", "PAPRIKA_APPROVAL", "PAPRIKA_MAX_AGE", "PAPRIKA_SYNC_INTERVAL", "PAPRIKA_TZ", "PAPRIKA_LOG_LEVEL"} {
+		"PAPRIKA_DATA_DIR", "PAPRIKA_LISTEN", "PAPRIKA_AUTH_TOKENS", "PAPRIKA_AUTH_TOKENS_FILE", "PAPRIKA_ENABLE_WRITES", "PAPRIKA_APPROVAL", "PAPRIKA_MAX_AGE", "PAPRIKA_SYNC_INTERVAL", "PAPRIKA_TZ", "PAPRIKA_LOG_LEVEL", "PAPRIKA_TOOLS"} {
 		t.Setenv(name, "")
 	}
 	for i := 0; i < len(kv); i += 2 {
@@ -33,7 +33,7 @@ func TestConfigDefaultsAreReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.writes || cfg.approval != mcpserver.ApprovalAuto || cfg.maxAge != 5*time.Minute || cfg.syncInterval != 15*time.Minute || cfg.dataDir != "/state/paprika-adapter" ||
-		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 || cfg.location != time.UTC {
+		cfg.listen != "127.0.0.1:8080" || len(cfg.clients) != 0 || cfg.location != time.UTC || cfg.tools != nil {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 }
@@ -72,6 +72,8 @@ func TestConfigRejectsBadValuesWithoutEchoingSecrets(t *testing.T) {
 		"negative":         {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_SYNC_INTERVAL", "-1m"},
 		"unknown timezone": {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_TZ", "Mars/Olympus"},
 		"weak token":       {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_AUTH_TOKENS", "anna:hunter2"},
+		"unknown tool":     {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_TOOLS", "list_pantry,delete_everything"},
+		"writes off":       {"PAPRIKA_EMAIL", "a@b.c", "PAPRIKA_PASSWORD", "hunter2", "PAPRIKA_TOOLS", "list_pantry,propose_pantry_items"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			setEnv(t, kv...)

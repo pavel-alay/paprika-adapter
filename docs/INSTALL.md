@@ -148,6 +148,7 @@ State then lives in `~/.local/state/paprika-adapter` (override with `PAPRIKA_DAT
 | `PAPRIKA_LISTEN` | `0.0.0.0:8080` in the image, else `127.0.0.1:8080` | address the HTTP server binds; MCP is served at `/mcp` |
 | `PAPRIKA_ENABLE_WRITES` | `false` | register the propose/commit tools |
 | `PAPRIKA_APPROVAL` | `auto` | `auto` = ask the user through an approval prompt when the client can show one; `human` = refuse writes unless it can; `none` = no prompt, a client with a token writes straight away |
+| `PAPRIKA_TOOLS` | empty (every tool) | allowlist of tool names, separated by commas or spaces. `sync_status` is always served, `commit_proposal` whenever a `propose_*` tool is listed. Write tools need `PAPRIKA_ENABLE_WRITES=true`, and `commit_proposal` commits only the kinds of proposal whose `propose_*` tool is listed. An unknown name, a write tool while writes are off, or `commit_proposal` without any `propose_*` tool stops the server from starting. Example: `list_pantry,list_grocery_lists,list_grocery_items,propose_pantry_items,propose_grocery_items` |
 | `PAPRIKA_TZ` | `UTC` | IANA zone name, for example `America/New_York`; decides "today" and the default week |
 | `PAPRIKA_MAX_AGE` | `5m` | cached data older than this is re-checked before being served |
 | `PAPRIKA_SYNC_INTERVAL` | `15m` | background refresh while serving; `0` disables |
